@@ -54,6 +54,8 @@ describe('GET /api/floors', () => {
 
 describe('POST /api/floors', () => {
   test('admin can create a floor', async () => {
+    // getTenantPlanLimits: pro plan has no floor limit
+    mockQuery.mockResolvedValueOnce({ rows: [{ plan: 'pro', plan_seats_limit: null }] });
     mockQuery.mockResolvedValueOnce({ rows: [floorA] });
 
     const res = await request(app)

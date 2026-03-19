@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
+import { getTenantPlanLimits } from '../billing/plans';
 
 const router = Router();
 
@@ -38,6 +39,22 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Respon
   if (typeof floor_number !== 'number' || !Number.isInteger(floor_number)) {
     res.status(400).json({ error: 'floor_number must be an integer' });
     return;
+  }
+
+  // Check floor limit for current plan
+  const { limits } = await getTenantPlanLimits(tenantId);
+  if (limits.maxFloors !== null) {
+    const floorCountResult = await query<{ count: string }>(
+      'SELECT COUNT(*) AS count FROM floors WHERE tenant_id = $1',
+      [tenantId]
+    );
+    if (parseInt(floorCountResult.rows[0].count, 10) >= limits.maxFloors) {
+      res.status(402).json({
+        error: `Floor limit reached for your plan. Upgrade to add more floors.`,
+        upgradeUrl: '/api/billing/checkout',
+      });
+      return;
+    }
   }
 
   const result = await query<{ id: string; name: string; building: string; floor_number: number; created_at: string }>(

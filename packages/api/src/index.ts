@@ -10,6 +10,8 @@ import roomBookingsRouter from './room-bookings/router';
 import teamBookingsRouter from './team-bookings/router';
 import ssoRouter from './sso/router';
 import { startReminderScheduler } from './services/reminder-scheduler';
+import { handleStripeWebhook } from './billing/webhook';
+import billingRouter from './billing/router';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -28,6 +30,9 @@ if (corsOrigin) {
     next();
   });
 }
+
+// Stripe webhook — raw body required for signature verification (must be before express.json)
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
@@ -54,6 +59,7 @@ app.use('/api/recurring-bookings', recurringBookingsRouter);
 app.use('/api/rooms', roomsRouter);
 app.use('/api/room-bookings', roomBookingsRouter);
 app.use('/api/team-bookings', teamBookingsRouter);
+app.use('/api/billing', billingRouter);
 
 if (require.main === module) {
   app.listen(PORT, () => {

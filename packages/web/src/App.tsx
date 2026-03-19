@@ -17,6 +17,7 @@ import { AdminRooms } from './pages/admin/AdminRooms';
 import { AdminTeamBookings } from './pages/admin/AdminTeamBookings';
 import { AdminSSO } from './pages/admin/AdminSSO';
 import { AdminIntegrations } from './pages/admin/AdminIntegrations';
+import { AdminBilling } from './pages/admin/AdminBilling';
 import { SsoCallback } from './pages/SsoCallback';
 
 function App() {
@@ -42,6 +43,7 @@ function App() {
                   <Route path="/admin/analytics" element={<AdminAnalytics />} />
                   <Route path="/admin/sso" element={<AdminSSO />} />
                   <Route path="/admin/integrations" element={<AdminIntegrations />} />
+                  <Route path="/admin/billing" element={<AdminBilling />} />
                 </Route>
               </Route>
             </Route>

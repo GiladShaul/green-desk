@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
+import { getTenantPlanLimits } from '../billing/plans';
 
 const router = Router();
 
@@ -442,6 +443,60 @@ router.delete('/integrations/:id', requireAuth, requireAdmin, async (req: AuthRe
 
   await query('DELETE FROM integrations WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
   res.status(204).end();
+});
+
+// POST /api/admin/users — invite/create a member (admin only)
+router.post('/users', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { name, email, password } = req.body as Record<string, unknown>;
+  const tenantId = req.user!.tenantId;
+
+  if (typeof name !== 'string' || !name.trim()) {
+    res.status(400).json({ error: 'name is required' });
+    return;
+  }
+  if (typeof email !== 'string' || !email.trim()) {
+    res.status(400).json({ error: 'email is required' });
+    return;
+  }
+  if (typeof password !== 'string' || password.length < 8) {
+    res.status(400).json({ error: 'password must be at least 8 characters' });
+    return;
+  }
+
+  // Check seat limit
+  const { seatsLimit } = await getTenantPlanLimits(tenantId);
+  if (seatsLimit !== null) {
+    const countResult = await query<{ count: string }>(
+      'SELECT COUNT(*) AS count FROM users WHERE tenant_id = $1',
+      [tenantId]
+    );
+    if (parseInt(countResult.rows[0].count, 10) >= seatsLimit) {
+      res.status(402).json({
+        error: `Seat limit reached for your plan. Upgrade to add more users.`,
+        upgradeUrl: '/api/billing/checkout',
+      });
+      return;
+    }
+  }
+
+  // Check email uniqueness within tenant
+  const existing = await query<{ id: string }>(
+    'SELECT id FROM users WHERE email = $1 AND tenant_id = $2',
+    [email.trim().toLowerCase(), tenantId]
+  );
+  if (existing.rows.length > 0) {
+    res.status(409).json({ error: 'A user with that email already exists' });
+    return;
+  }
+
+  const bcrypt = await import('bcryptjs');
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  const result = await query<{ id: string; email: string; name: string; role: string; created_at: string }>(
+    'INSERT INTO users (email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, role, created_at',
+    [email.trim().toLowerCase(), passwordHash, name.trim(), 'member', tenantId]
+  );
+  res.status(201).json(result.rows[0]);
 });
 
 export default router;
