@@ -29,7 +29,7 @@ export async function findOrProvisionUser(
   if (byEmail.rows.length > 0) {
     // Link the SSO identity going forward
     const updated = await query<ProvisionedUser>(
-      `UPDATE users SET sso_connection_id = $1, external_id = $2 WHERE id = $3 RETURNING ${USER_COLS}`,
+      `UPDATE users SET sso_connection_id = $1, external_id = $2, password_hash = NULL WHERE id = $3 RETURNING ${USER_COLS}`,
       [connection.id, info.externalId, byEmail.rows[0].id],
     );
     return updated.rows[0];

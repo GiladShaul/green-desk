@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
 import { query } from '../db';
 import { stateStore } from './state-store';
 import { buildOidcAuthUrl, exchangeOidcCode } from './oidc';
@@ -65,7 +66,7 @@ router.get('/:connectionId/login', async (req: Request, res: Response): Promise<
       stateStore.set(state, { connectionId: connection.id, codeVerifier, createdAt: Date.now() });
       res.redirect(authUrl);
     } else {
-      const relayState = crypto.randomUUID();
+      const relayState = randomUUID();
       stateStore.set(relayState, { connectionId: connection.id, codeVerifier: '', createdAt: Date.now() });
       const samlUrl = await buildSamlAuthUrl(connection, cbUrl, relayState);
       res.redirect(samlUrl);
@@ -83,6 +84,11 @@ router.get('/:connectionId/callback', async (req: Request, res: Response): Promi
   const stateEntry = stateStore.get(state);
   if (!stateEntry) {
     res.status(400).json({ error: 'Invalid or expired SSO state' });
+    return;
+  }
+
+  if (stateEntry.connectionId !== req.params.connectionId) {
+    res.status(400).json({ error: 'State/connection mismatch' });
     return;
   }
 
@@ -116,6 +122,11 @@ router.post('/:connectionId/callback', async (req: Request, res: Response): Prom
   const entry = stateStore.get(RelayState);
   if (!entry) {
     res.status(400).json({ error: 'Invalid or expired SSO state' });
+    return;
+  }
+
+  if (entry.connectionId !== req.params.connectionId) {
+    res.status(400).json({ error: 'State/connection mismatch' });
     return;
   }
 

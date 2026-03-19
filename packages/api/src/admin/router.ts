@@ -212,7 +212,14 @@ router.get('/sso-connections', requireAuth, requireAdmin, async (_req: AuthReque
     `SELECT id, name, provider_type, config, enabled, created_at, updated_at
      FROM sso_connections ORDER BY created_at DESC`,
   );
-  res.json(result.rows);
+  const rows = result.rows.map((row: Record<string, unknown>) => {
+    const config = row.config as Record<string, unknown>;
+    const safeConfig = { ...config };
+    delete safeConfig.client_secret;
+    delete safeConfig.idp_certificate;
+    return { ...row, config: safeConfig };
+  });
+  res.json(rows);
 });
 
 // POST /api/admin/sso-connections
@@ -275,7 +282,12 @@ router.patch('/sso-connections/:id', requireAuth, requireAdmin, async (req: Auth
      RETURNING id, name, provider_type, config, enabled, created_at, updated_at`,
     params,
   );
-  res.json(result.rows[0]);
+  const row = result.rows[0] as Record<string, unknown>;
+  const rowConfig = row.config as Record<string, unknown>;
+  const safeConfig = { ...rowConfig };
+  delete safeConfig.client_secret;
+  delete safeConfig.idp_certificate;
+  res.json({ ...row, config: safeConfig });
 });
 
 // DELETE /api/admin/sso-connections/:id

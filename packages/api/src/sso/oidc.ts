@@ -82,6 +82,11 @@ export async function exchangeOidcCode(
   const claims = tokenSet.claims();
 
   const email = (claims.email as string | undefined) ?? '';
+  const emailVerified = claims.email_verified;
+  // Reject if IdP explicitly says email is not verified
+  if (emailVerified === false) {
+    throw new Error('IdP email address is not verified');
+  }
   checkAllowedDomain(email, config.allowed_domains);
 
   return {
