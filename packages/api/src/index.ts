@@ -8,6 +8,7 @@ import recurringBookingsRouter, { generateRecurringBookings } from './recurring-
 import roomsRouter from './rooms/router';
 import roomBookingsRouter from './room-bookings/router';
 import teamBookingsRouter from './team-bookings/router';
+import ssoRouter from './sso/router';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -27,6 +28,7 @@ if (corsOrigin) {
   });
 }
 
+app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 app.get('/', (_req, res) => {
@@ -42,6 +44,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api/auth/sso', ssoRouter);
 app.use('/api/floors', floorsRouter);
 app.use('/api/desks', desksRouter);
 app.use('/api/bookings', bookingsRouter);
