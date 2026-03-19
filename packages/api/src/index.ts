@@ -1,11 +1,27 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import authRouter from './auth/router';
 import floorsRouter from './floors/router';
 import desksRouter from './desks/router';
 import bookingsRouter from './bookings/router';
+import adminRouter from './admin/router';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// CORS
+const corsOrigin = process.env.CORS_ORIGIN;
+if (corsOrigin) {
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    if (_req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+}
 
 app.use(express.json());
 
@@ -17,10 +33,15 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
 app.use('/api/auth', authRouter);
 app.use('/api/floors', floorsRouter);
 app.use('/api/desks', desksRouter);
 app.use('/api/bookings', bookingsRouter);
+app.use('/api/admin', adminRouter);
 
 if (require.main === module) {
   app.listen(PORT, () => {
