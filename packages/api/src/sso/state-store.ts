@@ -16,8 +16,11 @@ export const stateStore = {
   get(key: string): StateEntry | null {
     const entry = store.get(key);
     if (!entry) return null;
-    store.delete(key); // consume
-    if (Date.now() - entry.createdAt > TTL_MS) return null;
+    if (Date.now() - entry.createdAt > TTL_MS) {
+      store.delete(key); // clean up expired entry
+      return null;
+    }
+    store.delete(key); // consume on use
     return entry;
   },
 
