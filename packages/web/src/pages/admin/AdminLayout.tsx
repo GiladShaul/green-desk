@@ -43,6 +43,12 @@ export function AdminLayout() {
           >
             Integrations
           </NavLink>
+          <NavLink
+            to="/admin/billing"
+            className={({ isActive }) => `${styles.navLink} ${isActive ? styles.active : ''}`}
+          >
+            Billing
+          </NavLink>
         </nav>
       </aside>
       <main className={styles.content}>
