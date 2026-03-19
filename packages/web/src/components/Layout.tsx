@@ -9,6 +9,9 @@ export function Layout() {
     <div className={styles.wrapper}>
       <nav className={styles.nav}>
         <Link to="/dashboard" className={styles.logo}>Green Desk</Link>
+        <div className={styles.navLinks}>
+          <Link to="/bookings" className={styles.navLink}>My Bookings</Link>
+        </div>
         <div className={styles.navRight}>
           {user && <span className={styles.userName}>{user.name}</span>}
           <button className={styles.logoutBtn} onClick={logout}>Logout</button>

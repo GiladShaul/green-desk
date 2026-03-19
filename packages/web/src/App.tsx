@@ -6,6 +6,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { FloorView } from './pages/FloorView';
+import { MyBookings } from './pages/MyBookings';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/floors/:id" element={<FloorView />} />
+              <Route path="/bookings" element={<MyBookings />} />
             </Route>
           </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

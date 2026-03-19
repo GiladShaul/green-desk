@@ -74,12 +74,13 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
   const result = await query<{
     id: string; desk_id: string; user_id: string; date: string;
     start_time: string; end_time: string; status: string; created_at: string;
-    desk_label: string; floor_id: string;
+    desk_label: string; floor_id: string; floor_name: string;
   }>(
     `SELECT b.id, b.desk_id, b.user_id, b.date, b.start_time, b.end_time, b.status, b.created_at,
-            d.label AS desk_label, d.floor_id
+            d.label AS desk_label, d.floor_id, f.name AS floor_name
      FROM bookings b
      JOIN desks d ON d.id = b.desk_id
+     JOIN floors f ON f.id = d.floor_id
      WHERE b.user_id = $1
      ORDER BY b.date DESC, b.start_time DESC`,
     [userId]
