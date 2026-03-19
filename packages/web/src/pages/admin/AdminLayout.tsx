@@ -31,6 +31,12 @@ export function AdminLayout() {
           >
             Team Bookings
           </NavLink>
+          <NavLink
+            to="/admin/sso"
+            className={({ isActive }) => `${styles.navLink} ${isActive ? styles.active : ''}`}
+          >
+            SSO
+          </NavLink>
         </nav>
       </aside>
       <main className={styles.content}>
