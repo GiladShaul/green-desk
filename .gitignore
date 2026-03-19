@@ -51,3 +51,6 @@ pnpm-lock.yaml
 # Temp
 tmp/
 temp/
+
+# Git worktrees
+.worktrees/
