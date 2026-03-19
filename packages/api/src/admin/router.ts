@@ -304,4 +304,126 @@ router.delete('/sso-connections/:id', requireAuth, requireAdmin, async (req: Aut
   res.status(204).end();
 });
 
+// ── Webhook Integrations ───────────────────────────────────────────────────
+
+type IntegrationProvider = 'slack' | 'teams';
+const VALID_EVENTS = ['booking_confirmed', 'booking_cancelled', 'booking_reminder'] as const;
+
+// GET /api/admin/integrations
+router.get('/integrations', requireAuth, requireAdmin, async (_req: AuthRequest, res: Response): Promise<void> => {
+  const result = await query(
+    `SELECT id, name, provider, webhook_url, events, enabled, created_at, updated_at
+     FROM integrations ORDER BY created_at DESC`,
+  );
+  res.json(result.rows);
+});
+
+// POST /api/admin/integrations
+router.post('/integrations', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { name, provider, webhook_url, events } = req.body as Record<string, unknown>;
+
+  if (typeof name !== 'string' || !name.trim()) {
+    res.status(400).json({ error: 'name is required' });
+    return;
+  }
+  if (provider !== 'slack' && provider !== 'teams') {
+    res.status(400).json({ error: 'provider must be "slack" or "teams"' });
+    return;
+  }
+  if (typeof webhook_url !== 'string' || !webhook_url.trim()) {
+    res.status(400).json({ error: 'webhook_url is required' });
+    return;
+  }
+
+  let eventsArr: string[] = ['booking_confirmed', 'booking_cancelled', 'booking_reminder'];
+  if (events !== undefined) {
+    if (!Array.isArray(events)) {
+      res.status(400).json({ error: 'events must be an array' });
+      return;
+    }
+    const invalid = (events as unknown[]).filter(e => !VALID_EVENTS.includes(e as typeof VALID_EVENTS[number]));
+    if (invalid.length > 0) {
+      res.status(400).json({ error: `Invalid events: ${invalid.join(', ')}` });
+      return;
+    }
+    eventsArr = events as string[];
+  }
+
+  const result = await query(
+    `INSERT INTO integrations (name, provider, webhook_url, events)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, name, provider, webhook_url, events, enabled, created_at, updated_at`,
+    [name, provider as IntegrationProvider, webhook_url, JSON.stringify(eventsArr)],
+  );
+  res.status(201).json(result.rows[0]);
+});
+
+// PATCH /api/admin/integrations/:id
+router.patch('/integrations/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { name, webhook_url, events, enabled } = req.body as Record<string, unknown>;
+
+  const existing = await query('SELECT id FROM integrations WHERE id = $1', [id]);
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: 'Integration not found' });
+    return;
+  }
+
+  const updates: string[] = [];
+  const params: unknown[] = [];
+
+  if (typeof name === 'string') {
+    params.push(name);
+    updates.push(`name = $${params.length}`);
+  }
+  if (typeof webhook_url === 'string') {
+    params.push(webhook_url);
+    updates.push(`webhook_url = $${params.length}`);
+  }
+  if (events !== undefined) {
+    if (!Array.isArray(events)) {
+      res.status(400).json({ error: 'events must be an array' });
+      return;
+    }
+    const invalid = (events as unknown[]).filter(e => !VALID_EVENTS.includes(e as typeof VALID_EVENTS[number]));
+    if (invalid.length > 0) {
+      res.status(400).json({ error: `Invalid events: ${invalid.join(', ')}` });
+      return;
+    }
+    params.push(JSON.stringify(events));
+    updates.push(`events = $${params.length}`);
+  }
+  if (typeof enabled === 'boolean') {
+    params.push(enabled);
+    updates.push(`enabled = $${params.length}`);
+  }
+
+  if (updates.length === 0) {
+    res.status(400).json({ error: 'No updatable fields provided' });
+    return;
+  }
+
+  params.push(id);
+  const result = await query(
+    `UPDATE integrations SET ${updates.join(', ')} WHERE id = $${params.length}
+     RETURNING id, name, provider, webhook_url, events, enabled, created_at, updated_at`,
+    params,
+  );
+  res.json(result.rows[0]);
+});
+
+// DELETE /api/admin/integrations/:id
+router.delete('/integrations/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  const existing = await query('SELECT id FROM integrations WHERE id = $1', [id]);
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: 'Integration not found' });
+    return;
+  }
+
+  await query('DELETE FROM integrations WHERE id = $1', [id]);
+  res.status(204).end();
+});
+
 export default router;

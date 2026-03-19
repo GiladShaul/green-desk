@@ -9,6 +9,7 @@ import roomsRouter from './rooms/router';
 import roomBookingsRouter from './room-bookings/router';
 import teamBookingsRouter from './team-bookings/router';
 import ssoRouter from './sso/router';
+import { startReminderScheduler } from './services/reminder-scheduler';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -61,6 +62,7 @@ if (require.main === module) {
     generateRecurringBookings()
       .then((n) => console.log(`[recurring-bookings] generated ${n} booking(s) on startup`))
       .catch((err: unknown) => console.error('[recurring-bookings] startup generate error:', err));
+    startReminderScheduler();
   });
 }
 

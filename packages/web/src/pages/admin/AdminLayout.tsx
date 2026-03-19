@@ -37,6 +37,12 @@ export function AdminLayout() {
           >
             SSO
           </NavLink>
+          <NavLink
+            to="/admin/integrations"
+            className={({ isActive }) => `${styles.navLink} ${isActive ? styles.active : ''}`}
+          >
+            Integrations
+          </NavLink>
         </nav>
       </aside>
       <main className={styles.content}>

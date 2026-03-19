@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { sendBookingConfirmation, sendBookingCancellation } from '../services/email';
+import { notifyBookingEvent } from '../services/webhook';
 
 const router = Router();
 
@@ -86,6 +87,13 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
       booking,
       { id: row.id, label: row.label },
       { id: row.floor_id, name: row.floor_name, building: row.building }
+    );
+    await notifyBookingEvent(
+      'booking_confirmed',
+      booking,
+      { label: row.label, resource_type: 'desk' },
+      { name: row.floor_name, building: row.building },
+      { name: userResult.rows[0].name, email: userResult.rows[0].email },
     );
   }).catch((err: unknown) => console.error('[email] booking confirmation error:', err));
 });
@@ -202,6 +210,13 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
       { id: booking.id, date: booking.date, start_time: booking.start_time, end_time: booking.end_time },
       { id: row.id, label: row.label },
       { id: row.floor_id, name: row.floor_name, building: row.building }
+    );
+    await notifyBookingEvent(
+      'booking_cancelled',
+      { id: booking.id, date: booking.date, start_time: booking.start_time, end_time: booking.end_time },
+      { label: row.label, resource_type: 'desk' },
+      { name: row.floor_name, building: row.building },
+      { name: userResult.rows[0].name, email: userResult.rows[0].email },
     );
   }).catch((err: unknown) => console.error('[email] booking cancellation error:', err));
 });
