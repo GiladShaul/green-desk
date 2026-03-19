@@ -27,3 +27,71 @@ describe('SSO state store', () => {
     expect(stateStore.get('expired')).toBeNull();
   });
 });
+
+import { buildOidcAuthUrl, exchangeOidcCode } from '../sso/oidc';
+
+// Mock openid-client
+jest.mock('openid-client', () => {
+  const mockClient = {
+    authorizationUrl: jest.fn().mockReturnValue('https://idp.example.com/authorize?state=s&code_challenge=c'),
+    callback: jest.fn().mockResolvedValue({
+      claims: () => ({
+        sub: 'user-123',
+        email: 'alice@corp.com',
+        name: 'Alice',
+        email_verified: true,
+      }),
+    }),
+  };
+  const MockIssuer = function (this: Record<string, unknown>, _meta: unknown) {
+    this.Client = function (this: unknown) {};
+    Object.assign((this.Client as { prototype: object }).prototype, mockClient);
+  };
+  MockIssuer.discover = jest.fn().mockResolvedValue(new (MockIssuer as unknown as new () => unknown)());
+  const generators = {
+    state: jest.fn().mockReturnValue('random-state'),
+    codeVerifier: jest.fn().mockReturnValue('verifier-abc'),
+    codeChallenge: jest.fn().mockReturnValue('challenge-xyz'),
+  };
+  return { Issuer: MockIssuer, generators };
+});
+
+const oidcConnection = {
+  id: 'conn-oidc-1',
+  provider_type: 'oidc' as const,
+  config: {
+    issuer_url: 'https://idp.example.com',
+    client_id: 'client-abc',
+    client_secret: 'secret-xyz',
+    allowed_domains: ['corp.com'],
+  },
+};
+
+describe('buildOidcAuthUrl', () => {
+  test('returns authUrl and state', async () => {
+    const result = await buildOidcAuthUrl(oidcConnection, 'https://app.example.com/callback/oidc');
+    expect(result.authUrl).toContain('https://idp.example.com');
+    expect(result.state).toBe('random-state');
+    expect(result.codeVerifier).toBe('verifier-abc');
+  });
+});
+
+describe('exchangeOidcCode', () => {
+  test('returns normalized user info', async () => {
+    const info = await exchangeOidcCode(
+      oidcConnection,
+      'https://app.example.com/callback/oidc',
+      { code: 'auth-code', state: 'random-state' },
+      'verifier-abc',
+    );
+    expect(info.email).toBe('alice@corp.com');
+    expect(info.externalId).toBe('user-123');
+    expect(info.name).toBe('Alice');
+  });
+
+  test('throws if email domain not in allowed_domains', async () => {
+    const restrictedConn = { ...oidcConnection, config: { ...oidcConnection.config, allowed_domains: ['other.com'] } };
+    await expect(exchangeOidcCode(restrictedConn, 'https://app/cb', { code: 'c', state: 's' }, 'v'))
+      .rejects.toThrow('Email domain not allowed');
+  });
+});
