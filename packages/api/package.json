@@ -27,7 +27,8 @@
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^8.0.3",
     "openid-client": "^4.9.1",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "stripe": "^20.4.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
