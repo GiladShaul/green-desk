@@ -130,3 +130,72 @@ describe('Plan enforcement — users', () => {
     expect(res.status).toBe(201);
   });
 });
+
+describe('POST /api/billing/checkout', () => {
+  beforeEach(() => jest.resetAllMocks());
+
+  test('creates a checkout session and returns URL', async () => {
+    process.env.STRIPE_STARTER_PRICE_ID = 'price_starter_test';
+    mockQuery.mockResolvedValueOnce({ rows: [{ plan: 'free', stripe_customer_id: null, billing_email: null }] });
+    (mockStripe.customers.create as jest.Mock).mockResolvedValueOnce({ id: 'cus_test123' });
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // UPDATE stripe_customer_id
+    (mockStripe.checkout.sessions.create as jest.Mock).mockResolvedValueOnce({ url: 'https://checkout.stripe.com/test' });
+
+    const res = await request(app)
+      .post('/api/billing/checkout')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ planId: 'starter' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.url).toBe('https://checkout.stripe.com/test');
+  });
+
+  test('returns 400 for invalid planId', async () => {
+    const res = await request(app)
+      .post('/api/billing/checkout')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ planId: 'enterprise' });
+
+    expect(res.status).toBe(400);
+  });
+
+  test('reuses existing stripe customer', async () => {
+    process.env.STRIPE_STARTER_PRICE_ID = 'price_starter_test';
+    mockQuery.mockResolvedValueOnce({ rows: [{ plan: 'free', stripe_customer_id: 'cus_existing', billing_email: null }] });
+    (mockStripe.checkout.sessions.create as jest.Mock).mockResolvedValueOnce({ url: 'https://checkout.stripe.com/test2' });
+
+    const res = await request(app)
+      .post('/api/billing/checkout')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ planId: 'starter' });
+
+    expect(res.status).toBe(200);
+    expect(mockStripe.customers.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/billing/portal', () => {
+  beforeEach(() => jest.resetAllMocks());
+
+  test('creates a portal session and returns URL', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ stripe_customer_id: 'cus_test123' }] });
+    (mockStripe.billingPortal.sessions.create as jest.Mock).mockResolvedValueOnce({ url: 'https://billing.stripe.com/portal' });
+
+    const res = await request(app)
+      .post('/api/billing/portal')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.url).toBe('https://billing.stripe.com/portal');
+  });
+
+  test('returns 400 if no stripe customer yet', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ stripe_customer_id: null }] });
+
+    const res = await request(app)
+      .post('/api/billing/portal')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(400);
+  });
+});
