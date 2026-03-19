@@ -1,4 +1,5 @@
 import express from 'express';
+import authRouter from './auth/router';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -13,8 +14,12 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.listen(PORT, () => {
-  console.log(`API server running on http://localhost:${PORT}`);
-});
+app.use('/api/auth', authRouter);
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`API server running on http://localhost:${PORT}`);
+  });
+}
 
 export default app;
