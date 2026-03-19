@@ -60,7 +60,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const result = await query<{ id: string; email: string; name: string; role: string; password_hash: string }>(
+  const result = await query<{ id: string; email: string; name: string; role: string; password_hash: string | null }>(
     'SELECT id, email, name, role, password_hash FROM users WHERE email = $1',
     [email]
   );
@@ -68,6 +68,11 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
   if (!user) {
     res.status(401).json({ error: 'Invalid credentials' });
+    return;
+  }
+
+  if (!user.password_hash) {
+    res.status(401).json({ error: 'This account uses SSO. Please sign in with your identity provider.' });
     return;
   }
 

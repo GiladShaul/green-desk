@@ -187,3 +187,16 @@ describe('GET /api/auth/me', () => {
     expect(res.body).toHaveProperty('error');
   });
 });
+
+describe('POST /api/auth/login — SSO user', () => {
+  test('returns 401 when user has no password (SSO-only account)', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'sso-user-1', email: 'alice@corp.com', name: 'Alice', role: 'member', password_hash: null }],
+    });
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'alice@corp.com', password: 'anything' });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toContain('SSO');
+  });
+});
