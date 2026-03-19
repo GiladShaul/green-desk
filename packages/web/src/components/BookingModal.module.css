@@ -76,6 +76,69 @@
   background: #f0fdf4;
 }
 
+.recurringToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+  color: #374151;
+  cursor: pointer;
+  user-select: none;
+}
+
+.recurringToggle input[type='checkbox'] {
+  accent-color: #1a1a2e;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.dayPicker {
+  margin-bottom: 1rem;
+}
+
+.dayPickerLabel {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dayOptions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.dayOption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 36px;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dayOption input[type='radio'] {
+  display: none;
+}
+
+.daySelected {
+  border-color: #4ade80;
+  background: #f0fdf4;
+  color: #14532d;
+}
+
 .error {
   background: #fee2e2;
   color: #b91c1c;

@@ -113,6 +113,16 @@
   color: #6b7280;
 }
 
+.statusRecurring {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.recurringBadge {
+  font-weight: 600;
+  color: #1e40af;
+}
+
 .cancelBtn {
   background: none;
   border: 1px solid #fca5a5;

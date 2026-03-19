@@ -19,6 +19,7 @@ export interface Desk {
   y_position: number;
   status: 'active' | 'inactive';
   availability?: 'available' | 'booked';
+  has_recurring?: boolean;
 }
 
 function toLocalDateString(d: Date): string {
@@ -65,12 +66,20 @@ export function FloorView() {
   function deskColorClass(desk: Desk): string {
     if (desk.status === 'inactive') return styles.deskInactive;
     if (desk.availability === 'booked') return styles.deskBooked;
+    if (desk.has_recurring) return styles.deskRecurring;
     return styles.deskAvailable;
   }
 
   function handleDeskClick(desk: Desk) {
     if (desk.status === 'inactive' || desk.availability === 'booked') return;
     setSelectedDesk(desk);
+  }
+
+  function deskTitle(desk: Desk): string {
+    if (desk.status === 'inactive') return 'Inactive';
+    if (desk.availability === 'booked') return 'Already booked';
+    if (desk.has_recurring) return `Book ${desk.label} (has recurring booking)`;
+    return `Book ${desk.label}`;
   }
 
   return (
@@ -98,6 +107,7 @@ export function FloorView() {
         </label>
         <div className={styles.legend}>
           <span className={styles.legendItem}><span className={styles.dotAvailable} /> Available</span>
+          <span className={styles.legendItem}><span className={styles.dotRecurring} /> Recurring</span>
           <span className={styles.legendItem}><span className={styles.dotBooked} /> Booked</span>
           <span className={styles.legendItem}><span className={styles.dotInactive} /> Inactive</span>
         </div>
@@ -117,15 +127,12 @@ export function FloorView() {
             className={`${styles.desk} ${deskColorClass(desk)}`}
             onClick={() => handleDeskClick(desk)}
             disabled={desk.status === 'inactive' || desk.availability === 'booked'}
-            title={
-              desk.status === 'inactive'
-                ? 'Inactive'
-                : desk.availability === 'booked'
-                ? 'Already booked'
-                : `Book ${desk.label}`
-            }
+            title={deskTitle(desk)}
           >
             {desk.label}
+            {desk.has_recurring && desk.availability !== 'booked' && desk.status !== 'inactive' && (
+              <span className={styles.recurringIndicator} aria-label="Has recurring booking">↻</span>
+            )}
           </button>
         ))}
       </div>

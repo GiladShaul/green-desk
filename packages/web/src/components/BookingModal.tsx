@@ -9,6 +9,8 @@ const TIME_SLOTS = [
   { label: 'Full Day (09:00 – 17:00)', start: '09:00', end: '17:00' },
 ];
 
+const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 interface BookingModalProps {
   desk: Desk;
   date: string;
@@ -18,6 +20,12 @@ interface BookingModalProps {
 
 export function BookingModal({ desk, date, onClose, onBooked }: BookingModalProps) {
   const [slotIdx, setSlotIdx] = useState(2); // default full day
+  const [isRecurring, setIsRecurring] = useState(false);
+  // day_of_week derived from selected date (0=Sunday)
+  const [recurringDay, setRecurringDay] = useState<number>(() => {
+    const [y, m, d] = date.split('-').map(Number);
+    return new Date(y, m - 1, d).getDay();
+  });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -27,12 +35,22 @@ export function BookingModal({ desk, date, onClose, onBooked }: BookingModalProp
     setSubmitting(true);
     const slot = TIME_SLOTS[slotIdx];
     try {
-      await api.post('/bookings', {
-        desk_id: desk.id,
-        date,
-        start_time: slot.start,
-        end_time: slot.end,
-      });
+      if (isRecurring) {
+        await api.post('/recurring-bookings', {
+          desk_id: desk.id,
+          day_of_week: recurringDay,
+          start_time: slot.start,
+          end_time: slot.end,
+          start_date: date,
+        });
+      } else {
+        await api.post('/bookings', {
+          desk_id: desk.id,
+          date,
+          start_time: slot.start,
+          end_time: slot.end,
+        });
+      }
       setSuccess(true);
       setTimeout(onBooked, 1000);
     } catch (e: unknown) {
@@ -55,7 +73,9 @@ export function BookingModal({ desk, date, onClose, onBooked }: BookingModalProp
         <p className={styles.dateLine}>Date: <strong>{date}</strong></p>
 
         {success ? (
-          <p className={styles.successMsg}>Booking confirmed!</p>
+          <p className={styles.successMsg}>
+            {isRecurring ? 'Recurring booking created!' : 'Booking confirmed!'}
+          </p>
         ) : (
           <>
             <div className={styles.slots}>
@@ -72,6 +92,37 @@ export function BookingModal({ desk, date, onClose, onBooked }: BookingModalProp
               ))}
             </div>
 
+            <label className={styles.recurringToggle}>
+              <input
+                type="checkbox"
+                checked={isRecurring}
+                onChange={(e) => setIsRecurring(e.target.checked)}
+              />
+              <span>Repeat weekly</span>
+            </label>
+
+            {isRecurring && (
+              <div className={styles.dayPicker}>
+                <span className={styles.dayPickerLabel}>Every:</span>
+                <div className={styles.dayOptions}>
+                  {DAY_LABELS.map((label, dow) => (
+                    <label
+                      key={dow}
+                      className={`${styles.dayOption} ${recurringDay === dow ? styles.daySelected : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="recurringDay"
+                        checked={recurringDay === dow}
+                        onChange={() => setRecurringDay(dow)}
+                      />
+                      {label.slice(0, 3)}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {error && (
               <p className={styles.error}>
                 {error.includes('conflict') || error.includes('409')
@@ -85,7 +136,7 @@ export function BookingModal({ desk, date, onClose, onBooked }: BookingModalProp
                 Cancel
               </button>
               <button className={styles.confirmBtn} onClick={handleConfirm} disabled={submitting}>
-                {submitting ? 'Booking…' : 'Confirm Booking'}
+                {submitting ? 'Booking…' : isRecurring ? 'Set Recurring' : 'Confirm Booking'}
               </button>
             </div>
           </>

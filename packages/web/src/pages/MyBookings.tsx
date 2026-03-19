@@ -15,6 +15,21 @@ interface Booking {
   floor_name: string;
 }
 
+interface RecurringBooking {
+  id: string;
+  desk_id: string;
+  floor_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  start_date: string;
+  end_date: string | null;
+  desk_label: string;
+  floor_name: string;
+}
+
+const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 function toLocalDateString(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -76,17 +91,54 @@ function BookingCard({ booking, today, onCancelRequest }: BookingCardProps) {
   );
 }
 
+interface RecurringCardProps {
+  rb: RecurringBooking;
+  onDeleteRequest: (id: string) => void;
+}
+
+function RecurringCard({ rb, onDeleteRequest }: RecurringCardProps) {
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardMain}>
+        <span className={styles.deskLabel}>{rb.desk_label}</span>
+        <span className={styles.floorName}>{rb.floor_name}</span>
+      </div>
+      <div className={styles.cardMeta}>
+        <span className={styles.recurringBadge}>Every {DAY_LABELS[rb.day_of_week]}</span>
+        <span className={styles.sep}>·</span>
+        <span>{formatTimeSlot(rb.start_time, rb.end_time)}</span>
+      </div>
+      <div className={styles.cardFooter}>
+        <span className={`${styles.status} ${styles.statusRecurring}`}>recurring</span>
+        <button className={styles.cancelBtn} onClick={() => onDeleteRequest(rb.id)}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function MyBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [recurringBookings, setRecurringBookings] = useState<RecurringBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState('');
+  const [deleteRbTarget, setDeleteRbTarget] = useState<string | null>(null);
+  const [deletingRb, setDeletingRb] = useState(false);
+  const [deleteRbError, setDeleteRbError] = useState('');
 
   useEffect(() => {
-    api.get<Booking[]>('/bookings/me')
-      .then(setBookings)
+    Promise.all([
+      api.get<Booking[]>('/bookings/me'),
+      api.get<RecurringBooking[]>('/recurring-bookings'),
+    ])
+      .then(([b, rb]) => {
+        setBookings(b);
+        setRecurringBookings(rb);
+      })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -118,6 +170,27 @@ export function MyBookings() {
     setCancelError('');
   }
 
+  async function handleConfirmDeleteRb() {
+    if (!deleteRbTarget) return;
+    setDeletingRb(true);
+    setDeleteRbError('');
+    try {
+      await api.delete(`/recurring-bookings/${deleteRbTarget}`);
+      setRecurringBookings(prev => prev.filter(rb => rb.id !== deleteRbTarget));
+      setDeleteRbTarget(null);
+    } catch (e: unknown) {
+      setDeleteRbError(e instanceof Error ? e.message : 'Cancellation failed');
+    } finally {
+      setDeletingRb(false);
+    }
+  }
+
+  function handleCloseRbDialog() {
+    if (deletingRb) return;
+    setDeleteRbTarget(null);
+    setDeleteRbError('');
+  }
+
   return (
     <div>
       <h2 className={styles.heading}>My Bookings</h2>
@@ -127,6 +200,21 @@ export function MyBookings() {
 
       {!loading && !error && (
         <>
+          {recurringBookings.length > 0 && (
+            <section className={styles.section}>
+              <h3 className={styles.sectionTitle}>Recurring</h3>
+              <div className={styles.list}>
+                {recurringBookings.map(rb => (
+                  <RecurringCard
+                    key={rb.id}
+                    rb={rb}
+                    onDeleteRequest={setDeleteRbTarget}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
           <section className={styles.section}>
             <h3 className={styles.sectionTitle}>Upcoming</h3>
             {upcoming.length === 0 ? (
@@ -185,6 +273,34 @@ export function MyBookings() {
                 disabled={cancelling}
               >
                 {cancelling ? 'Cancelling…' : 'Yes, Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteRbTarget && (
+        <div className={styles.overlay} onClick={handleCloseRbDialog}>
+          <div className={styles.dialog} onClick={e => e.stopPropagation()}>
+            <h4 className={styles.dialogTitle}>Cancel recurring booking?</h4>
+            <p className={styles.dialogBody}>
+              This will stop future bookings from being created. Already-confirmed bookings will not be affected.
+            </p>
+            {deleteRbError && <p className={styles.dialogError}>{deleteRbError}</p>}
+            <div className={styles.dialogActions}>
+              <button
+                className={styles.dialogKeep}
+                onClick={handleCloseRbDialog}
+                disabled={deletingRb}
+              >
+                Keep Recurring
+              </button>
+              <button
+                className={styles.dialogConfirm}
+                onClick={handleConfirmDeleteRb}
+                disabled={deletingRb}
+              >
+                {deletingRb ? 'Cancelling…' : 'Yes, Cancel'}
               </button>
             </div>
           </div>

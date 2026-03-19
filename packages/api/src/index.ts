@@ -4,6 +4,7 @@ import floorsRouter from './floors/router';
 import desksRouter from './desks/router';
 import bookingsRouter from './bookings/router';
 import adminRouter from './admin/router';
+import recurringBookingsRouter, { generateRecurringBookings } from './recurring-bookings/router';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -42,10 +43,15 @@ app.use('/api/floors', floorsRouter);
 app.use('/api/desks', desksRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/recurring-bookings', recurringBookingsRouter);
 
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`API server running on http://localhost:${PORT}`);
+    // Materialize recurring bookings on startup
+    generateRecurringBookings()
+      .then((n) => console.log(`[recurring-bookings] generated ${n} booking(s) on startup`))
+      .catch((err: unknown) => console.error('[recurring-bookings] startup generate error:', err));
   });
 }
 
