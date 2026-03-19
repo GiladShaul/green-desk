@@ -65,3 +65,68 @@ describe('GET /api/billing/status', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('Plan enforcement — floors', () => {
+  beforeEach(() => jest.resetAllMocks());
+
+  test('free plan: rejects creating 2nd floor with 402', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ plan: 'free', plan_seats_limit: null }] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ count: '1' }] }); // already has 1 floor
+
+    const res = await request(app)
+      .post('/api/floors')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Floor 2', building: 'HQ', floor_number: 2 });
+
+    expect(res.status).toBe(402);
+    expect(res.body.error).toMatch(/upgrade/i);
+  });
+
+  test('starter plan: allows multiple floors', async () => {
+    // starter has maxFloors=null so floor count query is skipped — only getTenantPlanLimits + INSERT
+    mockQuery.mockResolvedValueOnce({ rows: [{ plan: 'starter', plan_seats_limit: 25 }] });
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'floor-new', name: 'Floor 6', building: 'HQ', floor_number: 6, created_at: new Date().toISOString() }],
+    });
+
+    const res = await request(app)
+      .post('/api/floors')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Floor 6', building: 'HQ', floor_number: 6 });
+
+    expect(res.status).toBe(201);
+  });
+});
+
+describe('Plan enforcement — users', () => {
+  beforeEach(() => jest.resetAllMocks());
+
+  test('free plan: rejects inviting 6th user with 402', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ plan: 'free', plan_seats_limit: null }] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ count: '5' }] }); // 5 users already
+
+    const res = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'New User', email: 'new@example.com', password: 'Password1!' });
+
+    expect(res.status).toBe(402);
+    expect(res.body.error).toMatch(/upgrade/i);
+  });
+
+  test('free plan: allows inviting 5th user', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ plan: 'free', plan_seats_limit: null }] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ count: '4' }] });   // 4 users so far
+    mockQuery.mockResolvedValueOnce({ rows: [] });                  // email uniqueness check
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'user-new', email: 'new@example.com', name: 'New User', role: 'member', created_at: new Date().toISOString() }],
+    });
+
+    const res = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'New User', email: 'new@example.com', password: 'Password1!' });
+
+    expect(res.status).toBe(201);
+  });
+});
