@@ -106,6 +106,78 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: R
   res.status(204).send();
 });
 
+// GET /api/floors/:id/rooms — list rooms on a floor with equipment tags and booking availability
+router.get('/:id/rooms', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { date, minCapacity, equipment: equipmentFilter } = req.query as Record<string, string>;
+
+  const floorResult = await query<{ id: string }>('SELECT id FROM floors WHERE id = $1', [id]);
+  if (floorResult.rows.length === 0) {
+    res.status(404).json({ error: 'Floor not found' });
+    return;
+  }
+
+  let params: unknown[] = [id];
+  let capacityClause = '';
+  if (minCapacity) {
+    const cap = parseInt(minCapacity, 10);
+    if (!isNaN(cap)) {
+      params.push(cap);
+      capacityClause = ` AND r.capacity >= $${params.length}`;
+    }
+  }
+
+  const roomsResult = await query<{
+    id: string; floor_id: string; name: string; capacity: number;
+    status: string; x_position: number; y_position: number; created_at: string; updated_at: string;
+    booked_count: string;
+  }>(
+    `SELECT r.id, r.floor_id, r.name, r.capacity, r.status, r.x_position, r.y_position,
+            r.created_at, r.updated_at,
+            CASE WHEN $${params.length + 1}::date IS NOT NULL
+              THEN (
+                SELECT COUNT(*) FROM room_bookings rb
+                WHERE rb.room_id = r.id AND rb.date = $${params.length + 1}::date AND rb.status = 'confirmed'
+              )
+              ELSE 0
+            END AS booked_count
+     FROM rooms r
+     WHERE r.floor_id = $1${capacityClause}
+     ORDER BY r.name`,
+    [...params, date ?? null]
+  );
+
+  // Fetch equipment tags for all rooms
+  const roomIds = roomsResult.rows.map(r => r.id);
+  let equipmentMap: Record<string, string[]> = {};
+  if (roomIds.length > 0) {
+    const eqResult = await query<{ room_id: string; tag: string }>(
+      `SELECT room_id, tag FROM room_equipment WHERE room_id = ANY($1) ORDER BY tag`,
+      [roomIds]
+    );
+    for (const row of eqResult.rows) {
+      if (!equipmentMap[row.room_id]) equipmentMap[row.room_id] = [];
+      equipmentMap[row.room_id].push(row.tag);
+    }
+  }
+
+  let rooms = roomsResult.rows.map(r => ({
+    ...r,
+    equipment: equipmentMap[r.id] ?? [],
+    availability: date ? (parseInt(r.booked_count, 10) === 0 ? 'available' : 'booked') : undefined,
+  }));
+
+  // Filter by required equipment tags
+  if (equipmentFilter) {
+    const requiredTags = equipmentFilter.split(',').map(t => t.trim()).filter(Boolean);
+    if (requiredTags.length > 0) {
+      rooms = rooms.filter(r => requiredTags.every(tag => r.equipment.includes(tag)));
+    }
+  }
+
+  res.json(rooms);
+});
+
 // GET /api/floors/:id — get a single floor
 router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;

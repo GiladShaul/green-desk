@@ -167,3 +167,64 @@
   color: #9ca3af;
   cursor: not-allowed;
 }
+
+.sectionHeading {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+  margin: 1.5rem 0 0.75rem;
+}
+
+.room {
+  width: 130px;
+  height: 80px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.4rem;
+}
+
+.roomAvailable {
+  background: #a7f3d0;
+  border-color: #34d399;
+  color: #065f46;
+}
+
+.roomAvailable:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(52, 211, 153, 0.4);
+}
+
+.roomBusy {
+  background: #fde68a;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.roomBusy:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(245, 158, 11, 0.4);
+}
+
+.roomName {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.roomCapacity {
+  font-size: 0.7rem;
+  font-weight: 500;
+  opacity: 0.85;
+}

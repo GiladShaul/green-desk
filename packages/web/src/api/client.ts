@@ -29,6 +29,9 @@ export const api = {
   get<T>(path: string): Promise<T> {
     return request<T>(path, { method: 'GET' });
   },
+  patch<T>(path: string, body: unknown): Promise<T> {
+    return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
+  },
   delete<T>(path: string): Promise<T> {
     return request<T>(path, { method: 'DELETE' });
   },

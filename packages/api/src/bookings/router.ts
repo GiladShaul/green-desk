@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
+import { sendBookingConfirmation, sendBookingCancellation } from '../services/email';
 
 const router = Router();
 
@@ -64,7 +65,29 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
      RETURNING id, desk_id, user_id, date, start_time, end_time, status, created_at`,
     [desk_id, userId, date, start_time, end_time]
   );
-  res.status(201).json(result.rows[0]);
+  const booking = result.rows[0];
+  res.status(201).json(booking);
+
+  // Fire confirmation email non-blocking — do not await, never fail the booking
+  query<{ id: string; email: string; name: string }>(
+    'SELECT id, email, name FROM users WHERE id = $1',
+    [userId]
+  ).then(async (userResult) => {
+    if (!userResult.rows[0]) return;
+    const deskFloorResult = await query<{ id: string; label: string; floor_id: string; floor_name: string; building: string }>(
+      `SELECT d.id, d.label, d.floor_id, f.name AS floor_name, f.building
+       FROM desks d JOIN floors f ON f.id = d.floor_id WHERE d.id = $1`,
+      [desk_id]
+    );
+    if (!deskFloorResult.rows[0]) return;
+    const row = deskFloorResult.rows[0];
+    await sendBookingConfirmation(
+      userResult.rows[0],
+      booking,
+      { id: row.id, label: row.label },
+      { id: row.floor_id, name: row.floor_name, building: row.building }
+    );
+  }).catch((err: unknown) => console.error('[email] booking confirmation error:', err));
 });
 
 // GET /api/bookings/me — list current user's bookings (upcoming + past)
@@ -137,8 +160,9 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
   const role = req.user!.role;
 
   const existing = await query<{
-    id: string; user_id: string; status: string;
-  }>('SELECT id, user_id, status FROM bookings WHERE id = $1', [id]);
+    id: string; desk_id: string; user_id: string; date: string;
+    start_time: string; end_time: string; status: string;
+  }>('SELECT id, desk_id, user_id, date, start_time, end_time, status FROM bookings WHERE id = $1', [id]);
 
   if (existing.rows.length === 0) {
     res.status(404).json({ error: 'Booking not found' });
@@ -159,6 +183,27 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
 
   await query('UPDATE bookings SET status = $1 WHERE id = $2', ['cancelled', id]);
   res.status(204).send();
+
+  // Fire cancellation email non-blocking
+  query<{ id: string; email: string; name: string }>(
+    'SELECT id, email, name FROM users WHERE id = $1',
+    [booking.user_id]
+  ).then(async (userResult) => {
+    if (!userResult.rows[0]) return;
+    const deskFloorResult = await query<{ id: string; label: string; floor_id: string; floor_name: string; building: string }>(
+      `SELECT d.id, d.label, d.floor_id, f.name AS floor_name, f.building
+       FROM desks d JOIN floors f ON f.id = d.floor_id WHERE d.id = $1`,
+      [booking.desk_id]
+    );
+    if (!deskFloorResult.rows[0]) return;
+    const row = deskFloorResult.rows[0];
+    await sendBookingCancellation(
+      userResult.rows[0],
+      { id: booking.id, date: booking.date, start_time: booking.start_time, end_time: booking.end_time },
+      { id: row.id, label: row.label },
+      { id: row.floor_id, name: row.floor_name, building: row.building }
+    );
+  }).catch((err: unknown) => console.error('[email] booking cancellation error:', err));
 });
 
 export default router;

@@ -11,6 +11,9 @@ export function Layout() {
         <Link to="/dashboard" className={styles.logo}>Green Desk</Link>
         <div className={styles.navLinks}>
           <Link to="/bookings" className={styles.navLink}>My Bookings</Link>
+          {user?.role === 'admin' && (
+            <Link to="/admin/floors" className={styles.navLink}>Admin</Link>
+          )}
         </div>
         <div className={styles.navRight}>
           {user && <span className={styles.userName}>{user.name}</span>}

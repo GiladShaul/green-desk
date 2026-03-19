@@ -33,6 +33,8 @@ const booking1 = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Default: return empty rows for any unmatched query (e.g. email-related lookups)
+  mockQuery.mockResolvedValue({ rows: [] });
 });
 
 // ---------------------------------------------------------------------------
