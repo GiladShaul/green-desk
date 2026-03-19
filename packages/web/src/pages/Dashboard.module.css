@@ -61,3 +61,14 @@
   font-size: 0.8rem;
   color: #6b7280;
 }
+
+@media (max-width: 639px) {
+  .grid {
+    flex-direction: column;
+  }
+
+  .floorCard {
+    width: 100%;
+    min-width: unset;
+  }
+}

@@ -228,3 +228,37 @@
   font-weight: 500;
   opacity: 0.85;
 }
+
+@media (max-width: 639px) {
+  .back {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .legend {
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+  }
+
+  .deskGrid {
+    gap: 0.5rem;
+  }
+
+  .desk {
+    width: 80px;
+    height: 64px;
+    font-size: 0.8rem;
+  }
+
+  .room {
+    width: 110px;
+    height: 72px;
+  }
+}

@@ -67,3 +67,94 @@
   flex: 1;
   padding: 2rem 1.5rem;
 }
+
+/* Hamburger — hidden on desktop */
+.hamburger {
+  display: none;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.4rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0.5rem;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Mobile dropdown menu */
+.mobileMenu {
+  display: none;
+  flex-direction: column;
+  background: #1a1a2e;
+  padding: 0.5rem 0;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.mobileLink {
+  display: block;
+  padding: 0.85rem 1.5rem;
+  color: rgba(255,255,255,0.85);
+  text-decoration: none;
+  font-size: 0.95rem;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.mobileLink:hover {
+  background: rgba(255,255,255,0.06);
+  color: #4ade80;
+}
+
+.mobileDivider {
+  height: 1px;
+  background: rgba(255,255,255,0.1);
+  margin: 0.25rem 0;
+}
+
+.mobileUserName {
+  padding: 0.5rem 1.5rem;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.55);
+}
+
+.mobileLogoutBtn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.85);
+  text-align: left;
+  padding: 0.85rem 1.5rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.mobileLogoutBtn:hover {
+  background: rgba(255,255,255,0.06);
+  color: #4ade80;
+}
+
+@media (max-width: 639px) {
+  .navLinks,
+  .navRight {
+    display: none;
+  }
+
+  .hamburger {
+    display: flex;
+  }
+
+  .mobileMenu {
+    display: flex;
+  }
+
+  .main {
+    padding: 1rem;
+  }
+}
