@@ -146,3 +146,43 @@ describe('validateSamlResponse', () => {
       .rejects.toThrow('Email domain not allowed');
   });
 });
+
+import * as db from '../db';
+import { findOrProvisionUser } from '../sso/provisioning';
+
+jest.mock('../db');
+const mockQuery = db.query as jest.Mock;
+
+describe('findOrProvisionUser', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  const conn = { id: 'conn-1', provider_type: 'oidc' as const, config: {} };
+  const info = { externalId: 'ext-001', email: 'carol@corp.com', name: 'Carol' };
+
+  test('returns existing user matched by sso_connection_id + external_id', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'u1', email: 'carol@corp.com', name: 'Carol', role: 'member' }],
+    });
+    const user = await findOrProvisionUser(conn, info);
+    expect(user.id).toBe('u1');
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  test('matches by email when no existing SSO record', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })   // no SSO match
+      .mockResolvedValueOnce({ rows: [{ id: 'u2', email: 'carol@corp.com', name: 'Carol', role: 'member' }] }) // email match
+      .mockResolvedValueOnce({ rows: [{ id: 'u2', email: 'carol@corp.com', name: 'Carol', role: 'member' }] }); // update returning
+    const user = await findOrProvisionUser(conn, info);
+    expect(user.id).toBe('u2');
+  });
+
+  test('auto-provisions a new user when no match', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })  // no SSO match
+      .mockResolvedValueOnce({ rows: [] })  // no email match
+      .mockResolvedValueOnce({ rows: [{ id: 'u3', email: 'carol@corp.com', name: 'Carol', role: 'member' }] }); // insert
+    const user = await findOrProvisionUser(conn, info);
+    expect(user.id).toBe('u3');
+  });
+});
