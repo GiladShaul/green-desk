@@ -6,5 +6,5 @@ if (!secret && process.env.NODE_ENV !== 'test') {
 }
 
 export const stripe = new Stripe(secret ?? 'sk_test_placeholder', {
-  apiVersion: '2024-06-20',
+  apiVersion: '2026-02-25.clover',
 });
