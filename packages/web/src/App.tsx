@@ -15,6 +15,7 @@ import { AdminUsers } from './pages/admin/AdminUsers';
 import { AdminAnalytics } from './pages/admin/AdminAnalytics';
 import { AdminRooms } from './pages/admin/AdminRooms';
 import { AdminTeamBookings } from './pages/admin/AdminTeamBookings';
+import { SsoCallback } from './pages/SsoCallback';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/sso-callback" element={<SsoCallback />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<Dashboard />} />
