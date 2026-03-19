@@ -199,3 +199,73 @@ describe('POST /api/billing/portal', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('POST /api/billing/webhook', () => {
+  const webhookSecret = 'whsec_test';
+  process.env.STRIPE_WEBHOOK_SECRET = webhookSecret;
+
+  beforeEach(() => jest.resetAllMocks());
+
+  function makeWebhookEvent(type: string, dataObject: object): object {
+    return { id: 'evt_test', type, data: { object: dataObject } };
+  }
+
+  test('checkout.session.completed activates subscription and updates plan', async () => {
+    (mockStripe.webhooks.constructEvent as jest.Mock).mockReturnValueOnce(
+      makeWebhookEvent('checkout.session.completed', {
+        metadata: { tenantId: 'tenant-1', planId: 'starter' },
+        subscription: 'sub_123',
+        customer: 'cus_123',
+      })
+    );
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .post('/api/billing/webhook')
+      .set('stripe-signature', 'sig_test')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ type: 'checkout.session.completed' }));
+
+    expect(res.status).toBe(200);
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('plan = $3'),
+      expect.arrayContaining(['sub_123', 'cus_123', 'starter', 'tenant-1'])
+    );
+  });
+
+  test('customer.subscription.deleted downgrades to free', async () => {
+    (mockStripe.webhooks.constructEvent as jest.Mock).mockReturnValueOnce(
+      makeWebhookEvent('customer.subscription.deleted', {
+        metadata: { tenantId: 'tenant-1' },
+        id: 'sub_123',
+      })
+    );
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .post('/api/billing/webhook')
+      .set('stripe-signature', 'sig_test')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ type: 'customer.subscription.deleted' }));
+
+    expect(res.status).toBe(200);
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("plan = 'free'"),
+      expect.arrayContaining(['tenant-1'])
+    );
+  });
+
+  test('returns 400 on invalid signature', async () => {
+    (mockStripe.webhooks.constructEvent as jest.Mock).mockImplementationOnce(() => {
+      throw new Error('Invalid signature');
+    });
+
+    const res = await request(app)
+      .post('/api/billing/webhook')
+      .set('stripe-signature', 'bad_sig')
+      .set('Content-Type', 'application/json')
+      .send('{}');
+
+    expect(res.status).toBe(400);
+  });
+});
