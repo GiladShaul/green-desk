@@ -10,10 +10,10 @@ const JWT_SECRET = 'test-secret';
 process.env.JWT_SECRET = JWT_SECRET;
 
 function adminToken() {
-  return jwt.sign({ sub: 'admin-1', role: 'admin' }, JWT_SECRET, { expiresIn: '1h' });
+  return jwt.sign({ sub: 'admin-1', role: 'admin', tenantId: 'tenant-1' }, JWT_SECRET, { expiresIn: '1h' });
 }
 function memberToken() {
-  return jwt.sign({ sub: 'member-1', role: 'member' }, JWT_SECRET, { expiresIn: '1h' });
+  return jwt.sign({ sub: 'member-1', role: 'member', tenantId: 'tenant-1' }, JWT_SECRET, { expiresIn: '1h' });
 }
 
 const sampleConn = {

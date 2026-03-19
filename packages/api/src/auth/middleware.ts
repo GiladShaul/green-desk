@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 export interface AuthPayload {
   sub: string;
   role: string;
+  tenantId: string;
 }
 
 export interface AuthRequest extends Request {
@@ -26,6 +27,10 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
 
   try {
     const payload = jwt.verify(token, secret) as AuthPayload;
+    if (!payload.tenantId) {
+      res.status(401).json({ error: 'Session expired: please log in again' });
+      return;
+    }
     req.user = payload;
     next();
   } catch {

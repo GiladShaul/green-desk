@@ -19,6 +19,8 @@ const existingUser = {
   name: 'Alice',
   role: 'member',
   password_hash: bcrypt.hashSync('correct-password', 10),
+  tenant_id: 'tenant-1',
+  tenant_name: 'Acme Corp',
   created_at: new Date().toISOString(),
 };
 
@@ -35,9 +37,11 @@ describe('POST /api/auth/register', () => {
     mockQuery
       // email-exists check returns no rows
       .mockResolvedValueOnce({ rows: [] })
-      // insert returns new user
+      // create tenant
+      .mockResolvedValueOnce({ rows: [{ id: 'tenant-1', name: "Bob's Organization", slug: 'bobs-org-abc123' }] })
+      // insert user returns new user
       .mockResolvedValueOnce({
-        rows: [{ id: 'new-uuid', email: 'bob@example.com', name: 'Bob', role: 'member' }],
+        rows: [{ id: 'new-uuid', email: 'bob@example.com', name: 'Bob', role: 'admin', tenant_id: 'tenant-1' }],
       });
 
     const res = await request(app)
@@ -48,6 +52,7 @@ describe('POST /api/auth/register', () => {
     expect(res.body).toHaveProperty('token');
     const decoded = jwt.verify(res.body.token, JWT_SECRET) as Record<string, unknown>;
     expect(decoded.sub).toBe('new-uuid');
+    expect(decoded.tenantId).toBe('tenant-1');
   });
 
   test('returns 409 when email is already registered', async () => {
@@ -105,6 +110,7 @@ describe('POST /api/auth/login', () => {
     expect(res.body).toHaveProperty('token');
     const decoded = jwt.verify(res.body.token, JWT_SECRET) as Record<string, unknown>;
     expect(decoded.sub).toBe(existingUser.id);
+    expect(decoded.tenantId).toBe('tenant-1');
   });
 
   test('returns 401 for wrong password', async () => {
@@ -145,9 +151,9 @@ describe('POST /api/auth/login', () => {
 
 describe('GET /api/auth/me', () => {
   test('returns the current user for a valid token', async () => {
-    const token = jwt.sign({ sub: existingUser.id, role: existingUser.role }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ sub: existingUser.id, role: existingUser.role, tenantId: 'tenant-1' }, JWT_SECRET, { expiresIn: '1h' });
     mockQuery.mockResolvedValueOnce({
-      rows: [{ id: existingUser.id, email: existingUser.email, name: existingUser.name, role: existingUser.role }],
+      rows: [{ id: existingUser.id, email: existingUser.email, name: existingUser.name, role: existingUser.role, tenant_id: 'tenant-1', tenant_name: 'Acme Corp' }],
     });
 
     const res = await request(app)
@@ -177,7 +183,7 @@ describe('GET /api/auth/me', () => {
   });
 
   test('returns 401 for an expired token', async () => {
-    const expiredToken = jwt.sign({ sub: existingUser.id }, JWT_SECRET, { expiresIn: '-1s' });
+    const expiredToken = jwt.sign({ sub: existingUser.id, tenantId: 'tenant-1' }, JWT_SECRET, { expiresIn: '-1s' });
 
     const res = await request(app)
       .get('/api/auth/me')
@@ -191,7 +197,7 @@ describe('GET /api/auth/me', () => {
 describe('POST /api/auth/login — SSO user', () => {
   test('returns 401 when user has no password (SSO-only account)', async () => {
     mockQuery.mockResolvedValueOnce({
-      rows: [{ id: 'sso-user-1', email: 'alice@corp.com', name: 'Alice', role: 'member', password_hash: null }],
+      rows: [{ id: 'sso-user-1', email: 'alice@corp.com', name: 'Alice', role: 'member', password_hash: null, tenant_id: 'tenant-1', tenant_name: 'Corp' }],
     });
     const res = await request(app)
       .post('/api/auth/login')

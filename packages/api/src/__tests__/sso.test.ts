@@ -156,7 +156,7 @@ const mockQuery = db.query as jest.Mock;
 describe('findOrProvisionUser', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  const conn = { id: 'conn-1', provider_type: 'oidc' as const, config: {} };
+  const conn = { id: 'conn-1', provider_type: 'oidc' as const, config: {}, tenant_id: 'tenant-1' };
   const info = { externalId: 'ext-001', email: 'carol@corp.com', name: 'Carol' };
 
   test('returns existing user matched by sso_connection_id + external_id', async () => {

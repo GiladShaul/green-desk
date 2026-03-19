@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
+import { notifyBookingEvent } from '../services/webhook';
 
 const router = Router();
 
@@ -11,6 +12,7 @@ const TIME_RE = /^\d{2}:\d{2}$/;
 router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { room_id, date, start_time, end_time, title } = req.body as Record<string, unknown>;
   const userId = req.user!.sub;
+  const tenantId = req.user!.tenantId;
 
   if (typeof room_id !== 'string' || !room_id.trim()) {
     res.status(400).json({ error: 'room_id is required' });
@@ -37,10 +39,10 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     return;
   }
 
-  // Check room exists and is active
+  // Check room exists, is active, and belongs to tenant
   const roomResult = await query<{ id: string; floor_id: string; name: string; status: string }>(
-    'SELECT id, floor_id, name, status FROM rooms WHERE id = $1',
-    [room_id]
+    'SELECT id, floor_id, name, status FROM rooms WHERE id = $1 AND tenant_id = $2',
+    [room_id, tenantId]
   );
   if (roomResult.rows.length === 0) {
     res.status(404).json({ error: 'Room not found' });
@@ -75,17 +77,39 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     id: string; room_id: string; user_id: string; floor_id: string; date: string;
     start_time: string; end_time: string; title: string | null; status: string; created_at: string;
   }>(
-    `INSERT INTO room_bookings (room_id, user_id, floor_id, date, start_time, end_time, title)
-     VALUES ($1, $2, $3, $4::date, $5::time, $6::time, $7)
+    `INSERT INTO room_bookings (room_id, user_id, floor_id, date, start_time, end_time, title, tenant_id)
+     VALUES ($1, $2, $3, $4::date, $5::time, $6::time, $7, $8)
      RETURNING id, room_id, user_id, floor_id, date, start_time, end_time, title, status, created_at`,
-    [room_id, userId, room.floor_id, date, start_time, end_time, title ?? null]
+    [room_id, userId, room.floor_id, date, start_time, end_time, title ?? null, tenantId]
   );
-  res.status(201).json(result.rows[0]);
+  const booking = result.rows[0];
+  res.status(201).json(booking);
+
+  // Fire webhook notification non-blocking
+  query<{ name: string; floor_name: string; building: string }>(
+    `SELECT r.name, f.name AS floor_name, f.building
+     FROM rooms r JOIN floors f ON f.id = r.floor_id WHERE r.id = $1`,
+    [room_id]
+  ).then(async (roomFloorResult) => {
+    if (!roomFloorResult.rows[0]) return;
+    const rf = roomFloorResult.rows[0];
+    const userResult = await query<{ name: string; email: string }>('SELECT name, email FROM users WHERE id = $1', [userId]);
+    if (!userResult.rows[0]) return;
+    await notifyBookingEvent(
+      'booking_confirmed',
+      booking,
+      { label: rf.name, resource_type: 'room' },
+      { name: rf.floor_name, building: rf.building },
+      { name: userResult.rows[0].name, email: userResult.rows[0].email },
+      tenantId,
+    );
+  }).catch((err: unknown) => console.error('[webhook] room booking notification error:', err));
 });
 
 // GET /api/room-bookings/me — list current user's room bookings
 router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.sub;
+  const tenantId = req.user!.tenantId;
 
   const result = await query<{
     id: string; room_id: string; user_id: string; floor_id: string; date: string;
@@ -98,9 +122,9 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
      FROM room_bookings rb
      JOIN rooms r ON r.id = rb.room_id
      JOIN floors f ON f.id = rb.floor_id
-     WHERE rb.user_id = $1
+     WHERE rb.user_id = $1 AND rb.tenant_id = $2
      ORDER BY rb.date DESC, rb.start_time DESC`,
-    [userId]
+    [userId, tenantId]
   );
   res.json(result.rows);
 });
@@ -108,6 +132,7 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
 // GET /api/room-bookings?roomId=X&date=Y — availability view for a room/date
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { roomId, date, floorId } = req.query as Record<string, string>;
+  const tenantId = req.user!.tenantId;
 
   if (date && !DATE_RE.test(date)) {
     res.status(400).json({ error: 'date must be in YYYY-MM-DD format' });
@@ -115,7 +140,6 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
   }
 
   if (roomId && date) {
-    // Availability view for a specific room on a date
     const result = await query<{
       id: string; room_id: string; user_id: string; date: string;
       start_time: string; end_time: string; title: string | null; status: string;
@@ -126,13 +150,12 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
        FROM room_bookings rb
        JOIN rooms r ON r.id = rb.room_id
        JOIN floors f ON f.id = rb.floor_id
-       WHERE rb.room_id = $1 AND rb.date = $2::date AND rb.status = 'confirmed'
+       WHERE rb.room_id = $1 AND rb.date = $2::date AND rb.status = 'confirmed' AND rb.tenant_id = $3
        ORDER BY rb.start_time`,
-      [roomId, date]
+      [roomId, date, tenantId]
     );
     res.json(result.rows);
   } else if (floorId && date) {
-    // All confirmed room bookings for a floor on a date
     const result = await query<{
       id: string; room_id: string; user_id: string; date: string;
       start_time: string; end_time: string; title: string | null; status: string;
@@ -142,9 +165,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
               r.name AS room_name, rb.floor_id
        FROM room_bookings rb
        JOIN rooms r ON r.id = rb.room_id
-       WHERE rb.date = $1::date AND rb.floor_id = $2 AND rb.status = 'confirmed'
+       WHERE rb.date = $1::date AND rb.floor_id = $2 AND rb.status = 'confirmed' AND rb.tenant_id = $3
        ORDER BY r.name, rb.start_time`,
-      [date, floorId]
+      [date, floorId, tenantId]
     );
     res.json(result.rows);
   } else if (date) {
@@ -157,9 +180,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
               r.name AS room_name, rb.floor_id
        FROM room_bookings rb
        JOIN rooms r ON r.id = rb.room_id
-       WHERE rb.date = $1::date AND rb.status = 'confirmed'
+       WHERE rb.date = $1::date AND rb.status = 'confirmed' AND rb.tenant_id = $2
        ORDER BY r.name, rb.start_time`,
-      [date]
+      [date, tenantId]
     );
     res.json(result.rows);
   } else {
@@ -172,13 +195,14 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
   const { id } = req.params;
   const userId = req.user!.sub;
   const role = req.user!.role;
+  const tenantId = req.user!.tenantId;
 
   const existing = await query<{
     id: string; room_id: string; user_id: string; date: string;
     start_time: string; end_time: string; status: string;
   }>(
-    'SELECT id, room_id, user_id, date, start_time, end_time, status FROM room_bookings WHERE id = $1',
-    [id]
+    'SELECT id, room_id, user_id, date, start_time, end_time, status FROM room_bookings WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId]
   );
 
   if (existing.rows.length === 0) {
@@ -198,7 +222,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
     return;
   }
 
-  await query('UPDATE room_bookings SET status = $1 WHERE id = $2', ['cancelled', id]);
+  await query('UPDATE room_bookings SET status = $1 WHERE id = $2 AND tenant_id = $3', ['cancelled', id, tenantId]);
   res.status(204).send();
 });
 

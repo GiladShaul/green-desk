@@ -12,10 +12,12 @@ function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void
   next();
 }
 
-// GET /api/floors — list all floors
-router.get('/', requireAuth, async (_req: AuthRequest, res: Response): Promise<void> => {
+// GET /api/floors — list all floors for current tenant
+router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const tenantId = req.user!.tenantId;
   const result = await query<{ id: string; name: string; building: string; floor_number: number; created_at: string }>(
-    'SELECT id, name, building, floor_number, created_at FROM floors ORDER BY building, floor_number'
+    'SELECT id, name, building, floor_number, created_at FROM floors WHERE tenant_id = $1 ORDER BY building, floor_number',
+    [tenantId]
   );
   res.json(result.rows);
 });
@@ -23,6 +25,7 @@ router.get('/', requireAuth, async (_req: AuthRequest, res: Response): Promise<v
 // POST /api/floors — create floor (admin only)
 router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   const { name, building, floor_number } = req.body as Record<string, unknown>;
+  const tenantId = req.user!.tenantId;
 
   if (typeof name !== 'string' || !name.trim()) {
     res.status(400).json({ error: 'name is required' });
@@ -38,8 +41,8 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Respon
   }
 
   const result = await query<{ id: string; name: string; building: string; floor_number: number; created_at: string }>(
-    'INSERT INTO floors (name, building, floor_number) VALUES ($1, $2, $3) RETURNING id, name, building, floor_number, created_at',
-    [name.trim(), building.trim(), floor_number]
+    'INSERT INTO floors (name, building, floor_number, tenant_id) VALUES ($1, $2, $3, $4) RETURNING id, name, building, floor_number, created_at',
+    [name.trim(), building.trim(), floor_number, tenantId]
   );
   res.status(201).json(result.rows[0]);
 });
@@ -48,10 +51,11 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Respon
 router.patch('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const { name, building, floor_number } = req.body as Record<string, unknown>;
+  const tenantId = req.user!.tenantId;
 
   const existing = await query<{ id: string; name: string; building: string; floor_number: number; created_at: string }>(
-    'SELECT id, name, building, floor_number, created_at FROM floors WHERE id = $1',
-    [id]
+    'SELECT id, name, building, floor_number, created_at FROM floors WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId]
   );
   if (existing.rows.length === 0) {
     res.status(404).json({ error: 'Floor not found' });
@@ -77,8 +81,8 @@ router.patch('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Re
   const newFloorNumber = floor_number !== undefined ? floor_number : floor.floor_number;
 
   const result = await query<{ id: string; name: string; building: string; floor_number: number; created_at: string }>(
-    'UPDATE floors SET name = $1, building = $2, floor_number = $3 WHERE id = $4 RETURNING id, name, building, floor_number, created_at',
-    [newName, newBuilding, newFloorNumber, id]
+    'UPDATE floors SET name = $1, building = $2, floor_number = $3 WHERE id = $4 AND tenant_id = $5 RETURNING id, name, building, floor_number, created_at',
+    [newName, newBuilding, newFloorNumber, id, tenantId]
   );
   res.json(result.rows[0]);
 });
@@ -86,23 +90,24 @@ router.patch('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Re
 // DELETE /api/floors/:id — delete floor if no active desks (admin only)
 router.delete('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
+  const tenantId = req.user!.tenantId;
 
-  const existing = await query<{ id: string }>('SELECT id FROM floors WHERE id = $1', [id]);
+  const existing = await query<{ id: string }>('SELECT id FROM floors WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
   if (existing.rows.length === 0) {
     res.status(404).json({ error: 'Floor not found' });
     return;
   }
 
   const activeDesks = await query<{ count: string }>(
-    "SELECT COUNT(*) as count FROM desks WHERE floor_id = $1 AND status = 'active'",
-    [id]
+    "SELECT COUNT(*) as count FROM desks WHERE floor_id = $1 AND status = 'active' AND tenant_id = $2",
+    [id, tenantId]
   );
   if (parseInt(activeDesks.rows[0].count, 10) > 0) {
     res.status(409).json({ error: 'Cannot delete floor with active desks' });
     return;
   }
 
-  await query('DELETE FROM floors WHERE id = $1', [id]);
+  await query('DELETE FROM floors WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
   res.status(204).send();
 });
 
@@ -110,14 +115,15 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: R
 router.get('/:id/rooms', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const { date, minCapacity, equipment: equipmentFilter } = req.query as Record<string, string>;
+  const tenantId = req.user!.tenantId;
 
-  const floorResult = await query<{ id: string }>('SELECT id FROM floors WHERE id = $1', [id]);
+  const floorResult = await query<{ id: string }>('SELECT id FROM floors WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
   if (floorResult.rows.length === 0) {
     res.status(404).json({ error: 'Floor not found' });
     return;
   }
 
-  let params: unknown[] = [id];
+  let params: unknown[] = [id, tenantId];
   let capacityClause = '';
   if (minCapacity) {
     const cap = parseInt(minCapacity, 10);
@@ -142,7 +148,7 @@ router.get('/:id/rooms', requireAuth, async (req: AuthRequest, res: Response): P
               ELSE 0
             END AS booked_count
      FROM rooms r
-     WHERE r.floor_id = $1${capacityClause}
+     WHERE r.floor_id = $1 AND r.tenant_id = $2${capacityClause}
      ORDER BY r.name`,
     [...params, date ?? null]
   );
@@ -181,9 +187,10 @@ router.get('/:id/rooms', requireAuth, async (req: AuthRequest, res: Response): P
 // GET /api/floors/:id — get a single floor
 router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
+  const tenantId = req.user!.tenantId;
   const result = await query<{ id: string; name: string; building: string; floor_number: number; created_at: string }>(
-    'SELECT id, name, building, floor_number, created_at FROM floors WHERE id = $1',
-    [id]
+    'SELECT id, name, building, floor_number, created_at FROM floors WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId]
   );
   if (result.rows.length === 0) {
     res.status(404).json({ error: 'Floor not found' });
@@ -196,9 +203,10 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
 router.get('/:id/desks', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const { date } = req.query as Record<string, string>;
+  const tenantId = req.user!.tenantId;
 
-  // Check floor exists
-  const floorResult = await query<{ id: string }>('SELECT id FROM floors WHERE id = $1', [id]);
+  // Check floor exists and belongs to tenant
+  const floorResult = await query<{ id: string }>('SELECT id FROM floors WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
   if (floorResult.rows.length === 0) {
     res.status(404).json({ error: 'Floor not found' });
     return;
@@ -226,10 +234,10 @@ router.get('/:id/desks', requireAuth, async (req: AuthRequest, res: Response): P
         ) AS has_recurring
        FROM desks d
        LEFT JOIN bookings b ON b.desk_id = d.id AND b.date = $2::date AND b.status = 'confirmed'
-       WHERE d.floor_id = $1
+       WHERE d.floor_id = $1 AND d.tenant_id = $3
        GROUP BY d.id
        ORDER BY d.label`,
-      [id, date]
+      [id, date, tenantId]
     );
     res.json(result.rows);
   } else {
@@ -237,8 +245,8 @@ router.get('/:id/desks', requireAuth, async (req: AuthRequest, res: Response): P
       id: string; floor_id: string; label: string; x_position: number; y_position: number;
       status: string; created_at: string;
     }>(
-      'SELECT id, floor_id, label, x_position, y_position, status, created_at FROM desks WHERE floor_id = $1 ORDER BY label',
-      [id]
+      'SELECT id, floor_id, label, x_position, y_position, status, created_at FROM desks WHERE floor_id = $1 AND tenant_id = $2 ORDER BY label',
+      [id, tenantId]
     );
     res.json(result.rows);
   }

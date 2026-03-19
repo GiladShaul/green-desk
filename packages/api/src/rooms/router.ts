@@ -15,6 +15,7 @@ function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void
 // POST /api/rooms — create a room (admin only)
 router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   const { floor_id, name, capacity, x_position, y_position, status, equipment } = req.body as Record<string, unknown>;
+  const tenantId = req.user!.tenantId;
 
   if (typeof floor_id !== 'string' || !floor_id.trim()) {
     res.status(400).json({ error: 'floor_id is required' });
@@ -49,8 +50,8 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Respon
     return;
   }
 
-  // Check floor exists
-  const floorResult = await query<{ id: string }>('SELECT id FROM floors WHERE id = $1', [floor_id]);
+  // Check floor exists and belongs to tenant
+  const floorResult = await query<{ id: string }>('SELECT id FROM floors WHERE id = $1 AND tenant_id = $2', [floor_id, tenantId]);
   if (floorResult.rows.length === 0) {
     res.status(404).json({ error: 'Floor not found' });
     return;
@@ -60,10 +61,10 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Respon
     id: string; floor_id: string; name: string; capacity: number;
     status: string; x_position: number; y_position: number; created_at: string; updated_at: string;
   }>(
-    `INSERT INTO rooms (floor_id, name, capacity, x_position, y_position, status)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO rooms (floor_id, name, capacity, x_position, y_position, status, tenant_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id, floor_id, name, capacity, status, x_position, y_position, created_at, updated_at`,
-    [floor_id, name.trim(), capacity ?? 4, x_position ?? 0, y_position ?? 0, status ?? 'active']
+    [floor_id, name.trim(), capacity ?? 4, x_position ?? 0, y_position ?? 0, status ?? 'active', tenantId]
   );
   const room = result.rows[0];
 
@@ -82,6 +83,7 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Respon
 router.patch('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const { name, capacity, x_position, y_position, status, equipment } = req.body as Record<string, unknown>;
+  const tenantId = req.user!.tenantId;
 
   if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
     res.status(400).json({ error: 'name must be a non-empty string' });
@@ -116,8 +118,8 @@ router.patch('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Re
     id: string; floor_id: string; name: string; capacity: number;
     status: string; x_position: number; y_position: number;
   }>(
-    'SELECT id, floor_id, name, capacity, status, x_position, y_position FROM rooms WHERE id = $1',
-    [id]
+    'SELECT id, floor_id, name, capacity, status, x_position, y_position FROM rooms WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId]
   );
   if (existing.rows.length === 0) {
     res.status(404).json({ error: 'Room not found' });
@@ -136,9 +138,9 @@ router.patch('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Re
     status: string; x_position: number; y_position: number; created_at: string; updated_at: string;
   }>(
     `UPDATE rooms SET name = $1, capacity = $2, x_position = $3, y_position = $4, status = $5
-     WHERE id = $6
+     WHERE id = $6 AND tenant_id = $7
      RETURNING id, floor_id, name, capacity, status, x_position, y_position, created_at, updated_at`,
-    [newName, newCapacity, newX, newY, newStatus, id]
+    [newName, newCapacity, newX, newY, newStatus, id, tenantId]
   );
 
   // Replace equipment tags if provided

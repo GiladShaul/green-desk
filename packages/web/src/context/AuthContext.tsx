@@ -6,6 +6,8 @@ export interface User {
   email: string;
   name: string;
   role: string;
+  tenantId: string;
+  tenantName: string;
 }
 
 interface AuthResponse {
@@ -17,7 +19,7 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string, orgName?: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -46,8 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
   }
 
-  async function register(name: string, email: string, password: string) {
-    const { token, user: u } = await api.post<AuthResponse>('/auth/register', { name, email, password });
+  async function register(name: string, email: string, password: string, orgName?: string) {
+    const { token, user: u } = await api.post<AuthResponse>('/auth/register', { name, email, password, orgName });
     localStorage.setItem('token', token);
     setUser(u);
   }

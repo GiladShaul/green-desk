@@ -16,6 +16,7 @@ interface UpcomingBooking {
   building: string;
   user_name: string;
   user_email: string;
+  tenant_id: string;
 }
 
 async function sendPendingReminders(): Promise<void> {
@@ -40,7 +41,7 @@ async function sendPendingReminders(): Promise<void> {
   const deskResult = await query<UpcomingBooking>(
     `SELECT b.id, 'desk' AS booking_type, b.date::text, b.start_time::text, b.end_time::text,
             d.label AS resource_label, f.name AS floor_name, f.building,
-            u.name AS user_name, u.email AS user_email
+            u.name AS user_name, u.email AS user_email, b.tenant_id
      FROM bookings b
      JOIN desks d ON d.id = b.desk_id
      JOIN floors f ON f.id = d.floor_id
@@ -58,7 +59,7 @@ async function sendPendingReminders(): Promise<void> {
   const roomResult = await query<UpcomingBooking>(
     `SELECT rb.id, 'room' AS booking_type, rb.date::text, rb.start_time::text, rb.end_time::text,
             r.name AS resource_label, f.name AS floor_name, f.building,
-            u.name AS user_name, u.email AS user_email
+            u.name AS user_name, u.email AS user_email, rb.tenant_id
      FROM room_bookings rb
      JOIN rooms r ON r.id = rb.room_id
      JOIN floors f ON f.id = rb.floor_id
@@ -82,6 +83,7 @@ async function sendPendingReminders(): Promise<void> {
         { label: b.resource_label, resource_type: b.booking_type },
         { name: b.floor_name, building: b.building },
         { name: b.user_name, email: b.user_email },
+        b.tenant_id,
       );
       // Record in reminder_log so we never send twice
       await query(

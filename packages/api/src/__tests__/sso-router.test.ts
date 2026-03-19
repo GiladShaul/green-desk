@@ -31,6 +31,7 @@ jest.mock('../sso/provisioning', () => ({
     email: 'alice@corp.com',
     name: 'Alice',
     role: 'member',
+    tenant_id: 'tenant-1',
   }),
 }));
 
@@ -58,7 +59,7 @@ describe('GET /api/auth/sso/connections', () => {
 describe('GET /api/auth/sso/:connectionId/login (OIDC)', () => {
   test('redirects to IdP authorize URL', async () => {
     mockQuery.mockResolvedValueOnce({
-      rows: [{ id: 'c1', provider_type: 'oidc', config: { issuer_url: 'https://idp.example.com', client_id: 'cid', client_secret: 'sec' }, enabled: true, name: 'Corp OKTA' }],
+      rows: [{ id: 'c1', provider_type: 'oidc', config: { issuer_url: 'https://idp.example.com', client_id: 'cid', client_secret: 'sec' }, enabled: true, name: 'Corp OKTA', tenant_id: 'tenant-1' }],
     });
     const res = await request(app).get('/api/auth/sso/c1/login');
     expect(res.status).toBe(302);
@@ -75,7 +76,7 @@ describe('GET /api/auth/sso/:connectionId/login (OIDC)', () => {
 describe('GET /api/auth/sso/:connectionId/callback (OIDC)', () => {
   test('exchanges code and redirects to frontend with token', async () => {
     mockQuery.mockResolvedValueOnce({
-      rows: [{ id: 'c1', provider_type: 'oidc', config: {}, enabled: true, name: 'Corp OKTA' }],
+      rows: [{ id: 'c1', provider_type: 'oidc', config: {}, enabled: true, name: 'Corp OKTA', tenant_id: 'tenant-1' }],
     });
     // Inject state manually into the state store
     const { stateStore } = require('../sso/state-store');
@@ -95,7 +96,7 @@ describe('GET /api/auth/sso/:connectionId/callback (OIDC)', () => {
 describe('POST /api/auth/sso/:connectionId/callback (SAML)', () => {
   test('validates SAML response and redirects with token', async () => {
     mockQuery.mockResolvedValueOnce({
-      rows: [{ id: 'c2', provider_type: 'saml', config: {}, enabled: true, name: 'Acme SAML' }],
+      rows: [{ id: 'c2', provider_type: 'saml', config: {}, enabled: true, name: 'Acme SAML', tenant_id: 'tenant-1' }],
     });
     // Inject RelayState
     const { stateStore } = require('../sso/state-store');

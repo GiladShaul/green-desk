@@ -155,11 +155,13 @@ export async function notifyBookingEvent(
   resource: WebhookResource,
   floor: WebhookFloor,
   user: WebhookUser,
+  tenantId: string,
 ): Promise<void> {
   let rows: IntegrationRow[] = [];
   try {
     const result = await query<IntegrationRow>(
-      `SELECT id, provider, webhook_url, events FROM integrations WHERE enabled = true`,
+      `SELECT id, provider, webhook_url, events FROM integrations WHERE enabled = true AND tenant_id = $1`,
+      [tenantId],
     );
     rows = result.rows;
   } catch (err) {

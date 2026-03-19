@@ -10,8 +10,8 @@ const mockQuery = db.query as jest.Mock;
 const JWT_SECRET = 'test-secret';
 process.env.JWT_SECRET = JWT_SECRET;
 
-function makeToken(role: 'admin' | 'member' = 'member', userId = 'user-1'): string {
-  return jwt.sign({ sub: userId, role }, JWT_SECRET, { expiresIn: '1h' });
+function makeToken(role: 'admin' | 'member' = 'member', userId = 'user-1', tenantId = 'tenant-1'): string {
+  return jwt.sign({ sub: userId, role, tenantId }, JWT_SECRET, { expiresIn: '1h' });
 }
 
 const adminToken = makeToken('admin', 'admin-1');
@@ -194,7 +194,7 @@ describe('GET /api/bookings', () => {
     // Query should have been called with floorId filter
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining('d.floor_id'),
-      ['2024-06-01', 'floor-1']
+      ['2024-06-01', 'floor-1', 'tenant-1']
     );
   });
 

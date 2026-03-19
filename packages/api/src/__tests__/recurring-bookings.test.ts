@@ -10,8 +10,8 @@ const mockQuery = db.query as jest.Mock;
 const JWT_SECRET = 'test-secret';
 process.env.JWT_SECRET = JWT_SECRET;
 
-function makeToken(role: 'admin' | 'member' = 'member', userId = 'user-1'): string {
-  return jwt.sign({ sub: userId, role }, JWT_SECRET, { expiresIn: '1h' });
+function makeToken(role: 'admin' | 'member' = 'member', userId = 'user-1', tenantId = 'tenant-1'): string {
+  return jwt.sign({ sub: userId, role, tenantId }, JWT_SECRET, { expiresIn: '1h' });
 }
 
 const memberToken = makeToken('member', 'member-1');

@@ -9,11 +9,11 @@ import { findOrProvisionUser } from './provisioning';
 
 const router = Router();
 
-function signToken(userId: string, role: string): string {
+function signToken(userId: string, role: string, tenantId: string): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET not set');
   const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
-  return jwt.sign({ sub: userId, role }, secret, { expiresIn } as import('jsonwebtoken').SignOptions);
+  return jwt.sign({ sub: userId, role, tenantId }, secret, { expiresIn } as import('jsonwebtoken').SignOptions);
 }
 
 function frontendUrl(): string {
@@ -32,11 +32,12 @@ interface SsoConnectionRow {
   config: Record<string, unknown>;
   enabled: boolean;
   name: string;
+  tenant_id: string;
 }
 
 async function loadConnection(connectionId: string): Promise<SsoConnectionRow | null> {
   const result = await query<SsoConnectionRow>(
-    `SELECT id, provider_type, config, enabled, name
+    `SELECT id, provider_type, config, enabled, name, tenant_id
      FROM sso_connections WHERE id = $1`,
     [connectionId],
   );
@@ -102,7 +103,7 @@ router.get('/:connectionId/callback', async (req: Request, res: Response): Promi
     const cbUrl = callbackUrl(req, connection.id);
     const userInfo = await exchangeOidcCode(connection, cbUrl, { code, state }, stateEntry.codeVerifier);
     const user = await findOrProvisionUser(connection, userInfo);
-    const token = signToken(user.id, user.role);
+    const token = signToken(user.id, user.role, user.tenant_id);
     res.redirect(`${frontendUrl()}/sso-callback?token=${encodeURIComponent(token)}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'SSO callback failed';
@@ -140,7 +141,7 @@ router.post('/:connectionId/callback', async (req: Request, res: Response): Prom
     const cbUrl = callbackUrl(req, connection.id);
     const userInfo = await validateSamlResponse(connection, cbUrl, req.body as Record<string, unknown>);
     const user = await findOrProvisionUser(connection, userInfo);
-    const token = signToken(user.id, user.role);
+    const token = signToken(user.id, user.role, user.tenant_id);
     res.redirect(`${frontendUrl()}/sso-callback?token=${encodeURIComponent(token)}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'SAML callback failed';

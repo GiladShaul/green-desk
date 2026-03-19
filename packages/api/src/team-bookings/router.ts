@@ -21,6 +21,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
 
   const { floor_id, date, title, desks } = req.body as Record<string, unknown>;
   const userId = req.user!.sub;
+  const tenantId = req.user!.tenantId;
 
   if (typeof floor_id !== 'string' || !floor_id.trim()) {
     res.status(400).json({ error: 'floor_id is required' });
@@ -47,8 +48,8 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     }
   }
 
-  // Floor exists?
-  const floorResult = await query<{ id: string }>('SELECT id FROM floors WHERE id = $1', [floor_id]);
+  // Floor exists and belongs to tenant?
+  const floorResult = await query<{ id: string }>('SELECT id FROM floors WHERE id = $1 AND tenant_id = $2', [floor_id, tenantId]);
   if (floorResult.rows.length === 0) {
     res.status(404).json({ error: 'Floor not found' });
     return;
@@ -56,12 +57,12 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
 
   const deskInputs = desks as DeskInput[];
 
-  // Verify all desks exist and belong to this floor, then check conflicts
+  // Verify all desks exist and belong to this floor and tenant, then check conflicts
   const conflicts: string[] = [];
   for (const d of deskInputs) {
     const deskResult = await query<{ id: string; label: string }>(
-      'SELECT id, label FROM desks WHERE id = $1 AND floor_id = $2 AND status = \'active\'',
-      [d.desk_id, floor_id]
+      "SELECT id, label FROM desks WHERE id = $1 AND floor_id = $2 AND status = 'active' AND tenant_id = $3",
+      [d.desk_id, floor_id, tenantId]
     );
     if (deskResult.rows.length === 0) {
       res.status(404).json({ error: `Desk ${d.desk_id} not found on this floor` });
@@ -72,8 +73,8 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     // Conflict with individual bookings
     const bookingConflict = await query<{ id: string }>(
       `SELECT id FROM bookings
-       WHERE desk_id = $1 AND date = $2::date AND status = 'confirmed'`,
-      [d.desk_id, date]
+       WHERE desk_id = $1 AND date = $2::date AND status = 'confirmed' AND tenant_id = $3`,
+      [d.desk_id, date, tenantId]
     );
     if (bookingConflict.rows.length > 0) {
       conflicts.push(deskLabel);
@@ -84,8 +85,8 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     const teamConflict = await query<{ id: string }>(
       `SELECT tbd.id FROM team_booking_desks tbd
        JOIN team_bookings tb ON tb.id = tbd.team_booking_id
-       WHERE tbd.desk_id = $1 AND tb.date = $2::date AND tb.status = 'confirmed'`,
-      [d.desk_id, date]
+       WHERE tbd.desk_id = $1 AND tb.date = $2::date AND tb.status = 'confirmed' AND tb.tenant_id = $3`,
+      [d.desk_id, date, tenantId]
     );
     if (teamConflict.rows.length > 0) {
       conflicts.push(deskLabel);
@@ -102,10 +103,10 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     id: string; floor_id: string; created_by_user_id: string; date: string;
     title: string; status: string; created_at: string; updated_at: string;
   }>(
-    `INSERT INTO team_bookings (floor_id, created_by_user_id, date, title)
-     VALUES ($1, $2, $3::date, $4)
+    `INSERT INTO team_bookings (floor_id, created_by_user_id, date, title, tenant_id)
+     VALUES ($1, $2, $3::date, $4, $5)
      RETURNING id, floor_id, created_by_user_id, date, title, status, created_at, updated_at`,
-    [floor_id, userId, date, title]
+    [floor_id, userId, date, title, tenantId]
   );
   const booking = tbResult.rows[0];
 
@@ -129,6 +130,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
 // GET /api/team-bookings/me — list team bookings where user is creator or assigned
 router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.sub;
+  const tenantId = req.user!.tenantId;
 
   const result = await query<{
     id: string; floor_id: string; created_by_user_id: string; date: string;
@@ -139,9 +141,9 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
      FROM team_bookings tb
      JOIN floors f ON f.id = tb.floor_id
      LEFT JOIN team_booking_desks tbd ON tbd.team_booking_id = tb.id
-     WHERE tb.created_by_user_id = $1 OR tbd.assigned_user_id = $1
+     WHERE (tb.created_by_user_id = $1 OR tbd.assigned_user_id = $1) AND tb.tenant_id = $2
      ORDER BY tb.date DESC`,
-    [userId]
+    [userId, tenantId]
   );
   res.json(result.rows);
 });
@@ -149,6 +151,7 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
 // GET /api/team-bookings — list team bookings (filter by date, floor)
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { date, floorId } = req.query as Record<string, string>;
+  const tenantId = req.user!.tenantId;
 
   if (!date || !DATE_RE.test(date)) {
     res.status(400).json({ error: 'date query param is required and must be in YYYY-MM-DD format' });
@@ -163,9 +166,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
     }>(
       `SELECT id, floor_id, created_by_user_id, date, title, status, created_at
        FROM team_bookings
-       WHERE date = $1::date AND floor_id = $2 AND status = 'confirmed'
+       WHERE date = $1::date AND floor_id = $2 AND status = 'confirmed' AND tenant_id = $3
        ORDER BY created_at`,
-      [date, floorId]
+      [date, floorId, tenantId]
     );
   } else {
     result = await query<{
@@ -174,9 +177,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
     }>(
       `SELECT id, floor_id, created_by_user_id, date, title, status, created_at
        FROM team_bookings
-       WHERE date = $1::date AND status = 'confirmed'
+       WHERE date = $1::date AND status = 'confirmed' AND tenant_id = $2
        ORDER BY created_at`,
-      [date]
+      [date, tenantId]
     );
   }
   res.json(result.rows);
@@ -185,6 +188,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
 // GET /api/team-bookings/:id — detail with desk assignments
 router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
+  const tenantId = req.user!.tenantId;
 
   const tbResult = await query<{
     id: string; floor_id: string; created_by_user_id: string; date: string;
@@ -195,8 +199,8 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
             tb.created_at, tb.updated_at, f.name AS floor_name
      FROM team_bookings tb
      JOIN floors f ON f.id = tb.floor_id
-     WHERE tb.id = $1`,
-    [id]
+     WHERE tb.id = $1 AND tb.tenant_id = $2`,
+    [id, tenantId]
   );
 
   if (tbResult.rows.length === 0) {
@@ -229,10 +233,11 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promi
 
   const { id } = req.params;
   const { desks } = req.body as { desks?: DeskInput[] };
+  const tenantId = req.user!.tenantId;
 
   const existing = await query<{
     id: string; floor_id: string; date: string; status: string;
-  }>('SELECT id, floor_id, date, status FROM team_bookings WHERE id = $1', [id]);
+  }>('SELECT id, floor_id, date, status FROM team_bookings WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
 
   if (existing.rows.length === 0) {
     res.status(404).json({ error: 'Team booking not found' });
@@ -257,8 +262,8 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promi
 
       const bookingConflict = await query<{ id: string }>(
         `SELECT id FROM bookings
-         WHERE desk_id = $1 AND date = $2::date AND status = 'confirmed'`,
-        [d.desk_id, booking.date]
+         WHERE desk_id = $1 AND date = $2::date AND status = 'confirmed' AND tenant_id = $3`,
+        [d.desk_id, booking.date, tenantId]
       );
       if (bookingConflict.rows.length > 0) {
         conflicts.push(d.desk_id);
@@ -269,8 +274,8 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promi
         `SELECT tbd.id FROM team_booking_desks tbd
          JOIN team_bookings tb ON tb.id = tbd.team_booking_id
          WHERE tbd.desk_id = $1 AND tb.date = $2::date AND tb.status = 'confirmed'
-           AND tb.id != $3`,
-        [d.desk_id, booking.date, id]
+           AND tb.id != $3 AND tb.tenant_id = $4`,
+        [d.desk_id, booking.date, id, tenantId]
       );
       if (teamConflict.rows.length > 0) {
         conflicts.push(d.desk_id);
@@ -295,7 +300,7 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promi
   const tbResult = await query<{
     id: string; floor_id: string; created_by_user_id: string; date: string;
     title: string; status: string; created_at: string; updated_at: string;
-  }>('SELECT id, floor_id, created_by_user_id, date, title, status, created_at, updated_at FROM team_bookings WHERE id = $1', [id]);
+  }>('SELECT id, floor_id, created_by_user_id, date, title, status, created_at, updated_at FROM team_bookings WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
 
   const desksResult = await query<{
     id: string; desk_id: string; assigned_user_id: string | null; desk_label: string;
@@ -314,6 +319,7 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promi
 router.post('/:id/claim', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const userId = req.user!.sub;
+  const tenantId = req.user!.tenantId;
   const { desk_id } = req.body as { desk_id?: unknown };
 
   if (typeof desk_id !== 'string' || !desk_id.trim()) {
@@ -321,10 +327,10 @@ router.post('/:id/claim', requireAuth, async (req: AuthRequest, res: Response): 
     return;
   }
 
-  // Booking exists and is confirmed?
+  // Booking exists, is confirmed, and belongs to tenant?
   const tbResult = await query<{ id: string; status: string }>(
-    'SELECT id, status FROM team_bookings WHERE id = $1',
-    [id]
+    'SELECT id, status FROM team_bookings WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId]
   );
   if (tbResult.rows.length === 0) {
     res.status(404).json({ error: 'Team booking not found' });
@@ -380,10 +386,11 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
   }
 
   const { id } = req.params;
+  const tenantId = req.user!.tenantId;
 
   const existing = await query<{ id: string; status: string }>(
-    'SELECT id, status FROM team_bookings WHERE id = $1',
-    [id]
+    'SELECT id, status FROM team_bookings WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId]
   );
 
   if (existing.rows.length === 0) {
@@ -396,7 +403,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
     return;
   }
 
-  await query('UPDATE team_bookings SET status = $1 WHERE id = $2', ['cancelled', id]);
+  await query('UPDATE team_bookings SET status = $1 WHERE id = $2 AND tenant_id = $3', ['cancelled', id, tenantId]);
   res.status(204).send();
 });
 

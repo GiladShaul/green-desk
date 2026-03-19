@@ -12,7 +12,12 @@ export function Layout() {
   return (
     <div className={styles.wrapper}>
       <nav className={styles.nav}>
-        <Link to="/dashboard" className={styles.logo} onClick={closeMenu}>Green Desk</Link>
+        <div className={styles.logoGroup}>
+          <Link to="/dashboard" className={styles.logo} onClick={closeMenu}>Green Desk</Link>
+          {user?.tenantName && (
+            <span className={styles.tenantName}>{user.tenantName}</span>
+          )}
+        </div>
         <div className={styles.navLinks}>
           <Link to="/bookings" className={styles.navLink}>My Bookings</Link>
           {user?.role === 'admin' && (
@@ -34,6 +39,9 @@ export function Layout() {
       </nav>
       {menuOpen && (
         <div className={styles.mobileMenu}>
+          {user?.tenantName && (
+            <span className={styles.mobileTenantName}>{user.tenantName}</span>
+          )}
           <Link to="/bookings" className={styles.mobileLink} onClick={closeMenu}>My Bookings</Link>
           {user?.role === 'admin' && (
             <Link to="/admin/floors" className={styles.mobileLink} onClick={closeMenu}>Admin</Link>

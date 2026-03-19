@@ -24,13 +24,13 @@ export async function generateRecurringBookings(): Promise<number> {
     dates.push(`${y}-${m}-${day}`);
   }
 
-  // Fetch all active recurring bookings
+  // Fetch all active recurring bookings (including tenant_id for proper isolation)
   const rbResult = await query<{
     id: string; user_id: string; desk_id: string; floor_id: string;
     day_of_week: number; start_time: string; end_time: string;
-    start_date: string; end_date: string | null;
+    start_date: string; end_date: string | null; tenant_id: string;
   }>(
-    `SELECT id, user_id, desk_id, floor_id, day_of_week, start_time, end_time, start_date, end_date
+    `SELECT id, user_id, desk_id, floor_id, day_of_week, start_time, end_time, start_date, end_date, tenant_id
      FROM recurring_bookings
      WHERE start_date <= CURRENT_DATE
        AND (end_date IS NULL OR end_date >= CURRENT_DATE)`
@@ -61,12 +61,12 @@ export async function generateRecurringBookings(): Promise<number> {
       );
       if (conflictResult.rows.length > 0) continue;
 
-      // Create the booking
+      // Create the booking with tenant_id
       await query(
-        `INSERT INTO bookings (desk_id, user_id, date, start_time, end_time)
-         VALUES ($1, $2, $3::date, $4::time, $5::time)
+        `INSERT INTO bookings (desk_id, user_id, date, start_time, end_time, tenant_id)
+         VALUES ($1, $2, $3::date, $4::time, $5::time, $6)
          ON CONFLICT DO NOTHING`,
-        [rb.desk_id, rb.user_id, dateStr, rb.start_time, rb.end_time]
+        [rb.desk_id, rb.user_id, dateStr, rb.start_time, rb.end_time, rb.tenant_id]
       );
       created++;
     }
@@ -80,6 +80,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
   const { desk_id, day_of_week, start_time, end_time, start_date, end_date } =
     req.body as Record<string, unknown>;
   const userId = req.user!.sub;
+  const tenantId = req.user!.tenantId;
 
   if (typeof desk_id !== 'string' || !desk_id.trim()) {
     res.status(400).json({ error: 'desk_id is required' });
@@ -116,10 +117,10 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     }
   }
 
-  // Check desk exists and get floor_id
+  // Check desk exists and belongs to tenant, get floor_id
   const deskResult = await query<{ id: string; floor_id: string }>(
-    'SELECT id, floor_id FROM desks WHERE id = $1',
-    [desk_id]
+    'SELECT id, floor_id FROM desks WHERE id = $1 AND tenant_id = $2',
+    [desk_id, tenantId]
   );
   if (deskResult.rows.length === 0) {
     res.status(404).json({ error: 'Desk not found' });
@@ -133,8 +134,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
      WHERE desk_id = $1
        AND day_of_week = $2
        AND start_time < $4::time
-       AND end_time > $3::time`,
-    [desk_id, day_of_week, start_time, end_time]
+       AND end_time > $3::time
+       AND tenant_id = $5`,
+    [desk_id, day_of_week, start_time, end_time, tenantId]
   );
   if (conflictResult.rows.length > 0) {
     res.status(409).json({ error: 'A recurring booking already exists for this desk and day with a conflicting time slot' });
@@ -147,10 +149,10 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     day_of_week: number; start_time: string; end_time: string;
     start_date: string; end_date: string | null; created_at: string; updated_at: string;
   }>(
-    `INSERT INTO recurring_bookings (user_id, desk_id, floor_id, day_of_week, start_time, end_time, start_date, end_date)
-     VALUES ($1, $2, $3, $4, $5::time, $6::time, $7::date, $8)
+    `INSERT INTO recurring_bookings (user_id, desk_id, floor_id, day_of_week, start_time, end_time, start_date, end_date, tenant_id)
+     VALUES ($1, $2, $3, $4, $5::time, $6::time, $7::date, $8, $9)
      RETURNING id, user_id, desk_id, floor_id, day_of_week, start_time, end_time, start_date, end_date, created_at, updated_at`,
-    [userId, desk_id, floor_id, day_of_week, start_time, end_time, start_date, endDateValue]
+    [userId, desk_id, floor_id, day_of_week, start_time, end_time, start_date, endDateValue, tenantId]
   );
   const rb = result.rows[0];
   res.status(201).json(rb);
@@ -164,6 +166,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
 // GET /api/recurring-bookings — list current user's recurring bookings
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.sub;
+  const tenantId = req.user!.tenantId;
 
   const result = await query<{
     id: string; user_id: string; desk_id: string; floor_id: string;
@@ -178,9 +181,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
      FROM recurring_bookings rb
      JOIN desks d ON d.id = rb.desk_id
      JOIN floors f ON f.id = rb.floor_id
-     WHERE rb.user_id = $1
+     WHERE rb.user_id = $1 AND rb.tenant_id = $2
      ORDER BY rb.day_of_week, rb.start_time`,
-    [userId]
+    [userId, tenantId]
   );
   res.json(result.rows);
 });
@@ -189,10 +192,11 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
 router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const userId = req.user!.sub;
+  const tenantId = req.user!.tenantId;
 
   const existing = await query<{ id: string; user_id: string }>(
-    'SELECT id, user_id FROM recurring_bookings WHERE id = $1',
-    [id]
+    'SELECT id, user_id FROM recurring_bookings WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId]
   );
   if (existing.rows.length === 0) {
     res.status(404).json({ error: 'Recurring booking not found' });
@@ -203,7 +207,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
     return;
   }
 
-  await query('DELETE FROM recurring_bookings WHERE id = $1', [id]);
+  await query('DELETE FROM recurring_bookings WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
   res.status(204).send();
 });
 

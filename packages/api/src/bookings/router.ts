@@ -13,6 +13,7 @@ const TIME_RE = /^\d{2}:\d{2}$/;
 router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { desk_id, date, start_time, end_time } = req.body as Record<string, unknown>;
   const userId = req.user!.sub;
+  const tenantId = req.user!.tenantId;
 
   if (typeof desk_id !== 'string' || !desk_id.trim()) {
     res.status(400).json({ error: 'desk_id is required' });
@@ -35,8 +36,8 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     return;
   }
 
-  // Check desk exists
-  const deskResult = await query<{ id: string }>('SELECT id FROM desks WHERE id = $1', [desk_id]);
+  // Check desk exists and belongs to tenant
+  const deskResult = await query<{ id: string }>('SELECT id FROM desks WHERE id = $1 AND tenant_id = $2', [desk_id, tenantId]);
   if (deskResult.rows.length === 0) {
     res.status(404).json({ error: 'Desk not found' });
     return;
@@ -61,10 +62,10 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     id: string; desk_id: string; user_id: string; date: string;
     start_time: string; end_time: string; status: string; created_at: string;
   }>(
-    `INSERT INTO bookings (desk_id, user_id, date, start_time, end_time)
-     VALUES ($1, $2, $3::date, $4::time, $5::time)
+    `INSERT INTO bookings (desk_id, user_id, date, start_time, end_time, tenant_id)
+     VALUES ($1, $2, $3::date, $4::time, $5::time, $6)
      RETURNING id, desk_id, user_id, date, start_time, end_time, status, created_at`,
-    [desk_id, userId, date, start_time, end_time]
+    [desk_id, userId, date, start_time, end_time, tenantId]
   );
   const booking = result.rows[0];
   res.status(201).json(booking);
@@ -94,6 +95,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
       { label: row.label, resource_type: 'desk' },
       { name: row.floor_name, building: row.building },
       { name: userResult.rows[0].name, email: userResult.rows[0].email },
+      tenantId,
     );
   }).catch((err: unknown) => console.error('[email] booking confirmation error:', err));
 });
@@ -101,6 +103,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
 // GET /api/bookings/me — list current user's bookings (upcoming + past)
 router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.sub;
+  const tenantId = req.user!.tenantId;
 
   const result = await query<{
     id: string; desk_id: string; user_id: string; date: string;
@@ -112,9 +115,9 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
      FROM bookings b
      JOIN desks d ON d.id = b.desk_id
      JOIN floors f ON f.id = d.floor_id
-     WHERE b.user_id = $1
+     WHERE b.user_id = $1 AND b.tenant_id = $2
      ORDER BY b.date DESC, b.start_time DESC`,
-    [userId]
+    [userId, tenantId]
   );
   res.json(result.rows);
 });
@@ -122,6 +125,7 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
 // GET /api/bookings?date=YYYY-MM-DD&floorId=X — list bookings for availability view
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { date, floorId } = req.query as Record<string, string>;
+  const tenantId = req.user!.tenantId;
 
   if (!date || !DATE_RE.test(date)) {
     res.status(400).json({ error: 'date query param is required and must be in YYYY-MM-DD format' });
@@ -138,9 +142,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
               d.label AS desk_label, d.floor_id
        FROM bookings b
        JOIN desks d ON d.id = b.desk_id
-       WHERE b.date = $1::date AND d.floor_id = $2 AND b.status = 'confirmed'
+       WHERE b.date = $1::date AND d.floor_id = $2 AND b.status = 'confirmed' AND b.tenant_id = $3
        ORDER BY d.label, b.start_time`,
-      [date, floorId]
+      [date, floorId, tenantId]
     );
     res.json(result.rows);
   } else {
@@ -153,9 +157,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<vo
               d.label AS desk_label, d.floor_id
        FROM bookings b
        JOIN desks d ON d.id = b.desk_id
-       WHERE b.date = $1::date AND b.status = 'confirmed'
+       WHERE b.date = $1::date AND b.status = 'confirmed' AND b.tenant_id = $2
        ORDER BY d.label, b.start_time`,
-      [date]
+      [date, tenantId]
     );
     res.json(result.rows);
   }
@@ -166,11 +170,12 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
   const { id } = req.params;
   const userId = req.user!.sub;
   const role = req.user!.role;
+  const tenantId = req.user!.tenantId;
 
   const existing = await query<{
     id: string; desk_id: string; user_id: string; date: string;
     start_time: string; end_time: string; status: string;
-  }>('SELECT id, desk_id, user_id, date, start_time, end_time, status FROM bookings WHERE id = $1', [id]);
+  }>('SELECT id, desk_id, user_id, date, start_time, end_time, status FROM bookings WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
 
   if (existing.rows.length === 0) {
     res.status(404).json({ error: 'Booking not found' });
@@ -189,7 +194,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
     return;
   }
 
-  await query('UPDATE bookings SET status = $1 WHERE id = $2', ['cancelled', id]);
+  await query('UPDATE bookings SET status = $1 WHERE id = $2 AND tenant_id = $3', ['cancelled', id, tenantId]);
   res.status(204).send();
 
   // Fire cancellation email non-blocking
@@ -217,6 +222,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
       { label: row.label, resource_type: 'desk' },
       { name: row.floor_name, building: row.building },
       { name: userResult.rows[0].name, email: userResult.rows[0].email },
+      tenantId,
     );
   }).catch((err: unknown) => console.error('[email] booking cancellation error:', err));
 });

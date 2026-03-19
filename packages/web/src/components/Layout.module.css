@@ -14,11 +14,31 @@
   color: #fff;
 }
 
+.logoGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .logo {
   font-size: 1.2rem;
   font-weight: 700;
   color: #4ade80;
   text-decoration: none;
+}
+
+.tenantName {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  padding-left: 0.75rem;
+}
+
+.mobileTenantName {
+  padding: 0.5rem 1.5rem;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-style: italic;
 }
 
 .navLinks {

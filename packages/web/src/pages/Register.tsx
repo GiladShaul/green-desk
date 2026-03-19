@@ -7,6 +7,7 @@ export function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState('');
+  const [orgName, setOrgName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,7 +18,7 @@ export function Register() {
     setError('');
     setLoading(true);
     try {
-      await register(name, email, password);
+      await register(name, email, password, orgName || undefined);
       navigate('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
@@ -33,7 +34,7 @@ export function Register() {
         {error && <p className={styles.error}>{error}</p>}
         <form onSubmit={handleSubmit} className={styles.form}>
           <label className={styles.label}>
-            Name
+            Your name
             <input
               type="text"
               className={styles.input}
@@ -41,6 +42,16 @@ export function Register() {
               onChange={(e) => setName(e.target.value)}
               required
               autoFocus
+            />
+          </label>
+          <label className={styles.label}>
+            Organization name
+            <input
+              type="text"
+              className={styles.input}
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              placeholder="Optional — defaults to your name"
             />
           </label>
           <label className={styles.label}>
