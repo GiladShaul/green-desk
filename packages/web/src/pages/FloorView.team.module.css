@@ -1,0 +1,94 @@
+.teamModeBar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.teamModeBtn {
+  padding: 0.4rem 0.85rem;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #374151;
+  font-weight: 500;
+}
+
+.teamModeBtn:hover {
+  background: #e5e7eb;
+}
+
+.teamModeBtnActive {
+  padding: 0.4rem 0.85rem;
+  background: #1a1a2e;
+  border: 1px solid #1a1a2e;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #fff;
+  font-weight: 600;
+}
+
+.teamModeBtnActive:hover {
+  background: #2d2d4e;
+}
+
+.createTeamBtn {
+  padding: 0.4rem 0.85rem;
+  background: #7c3aed;
+  border: 1px solid #6d28d9;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #fff;
+  font-weight: 600;
+}
+
+.createTeamBtn:hover {
+  background: #6d28d9;
+}
+
+.teamHint {
+  font-size: 0.85rem;
+  color: #7c3aed;
+  font-weight: 500;
+  margin: -0.75rem 0 1rem;
+}
+
+.deskTeamSelected {
+  background: #7c3aed;
+  border-color: #6d28d9;
+  color: #fff;
+  position: relative;
+}
+
+.deskTeamSelected:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(124, 58, 237, 0.4);
+}
+
+.deskTeamBooked {
+  background: #ddd6fe;
+  border-color: #7c3aed;
+  color: #4c1d95;
+  cursor: not-allowed;
+}
+
+.dotTeamBooked {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  display: inline-block;
+  background: #ddd6fe;
+  border: 1px solid #7c3aed;
+}
+
+.checkmark {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  font-size: 0.75rem;
+  line-height: 1;
+}

@@ -5,6 +5,9 @@ import desksRouter from './desks/router';
 import bookingsRouter from './bookings/router';
 import adminRouter from './admin/router';
 import recurringBookingsRouter, { generateRecurringBookings } from './recurring-bookings/router';
+import roomsRouter from './rooms/router';
+import roomBookingsRouter from './room-bookings/router';
+import teamBookingsRouter from './team-bookings/router';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -44,6 +47,9 @@ app.use('/api/desks', desksRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/recurring-bookings', recurringBookingsRouter);
+app.use('/api/rooms', roomsRouter);
+app.use('/api/room-bookings', roomBookingsRouter);
+app.use('/api/team-bookings', teamBookingsRouter);
 
 if (require.main === module) {
   app.listen(PORT, () => {
