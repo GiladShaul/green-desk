@@ -61,6 +61,14 @@ app.use('/api/room-bookings', roomBookingsRouter);
 app.use('/api/team-bookings', teamBookingsRouter);
 app.use('/api/billing', billingRouter);
 
+// Global error handler — catches unhandled async errors so the process doesn't crash
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('[unhandled]', err.message);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`API server running on http://localhost:${PORT}`);

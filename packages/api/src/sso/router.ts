@@ -46,10 +46,14 @@ async function loadConnection(connectionId: string): Promise<SsoConnectionRow | 
 
 // GET /api/auth/sso/connections — public: list enabled connections for login page
 router.get('/connections', async (_req: Request, res: Response): Promise<void> => {
-  const result = await query<{ id: string; name: string; provider_type: string }>(
-    `SELECT id, name, provider_type FROM sso_connections WHERE enabled = true ORDER BY name`,
-  );
-  res.json(result.rows);
+  try {
+    const result = await query<{ id: string; name: string; provider_type: string }>(
+      `SELECT id, name, provider_type FROM sso_connections WHERE enabled = true ORDER BY name`,
+    );
+    res.json(result.rows);
+  } catch {
+    res.json([]);
+  }
 });
 
 // GET /api/auth/sso/:connectionId/login — redirect to IdP
