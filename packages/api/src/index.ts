@@ -1,3 +1,7 @@
+import { config } from 'dotenv';
+import path from 'path';
+config({ path: path.resolve(__dirname, '..', '..', '..', '.env') });
+
 import express, { Request, Response, NextFunction } from 'express';
 import authRouter from './auth/router';
 import floorsRouter from './floors/router';

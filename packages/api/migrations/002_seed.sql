@@ -3,8 +3,8 @@
 
 -- Seed users (password_hash is bcrypt of 'password123')
 INSERT INTO users (id, email, password_hash, name, role) VALUES
-  ('a0000000-0000-0000-0000-000000000001', 'admin@greendesk.com', '$2b$10$K7L1OJ45/4Y2nIvhRVpCe.FSmhDdWoXehVzJptJ/op0lSm58ZN3pq', 'Admin User', 'admin'),
-  ('a0000000-0000-0000-0000-000000000002', 'alice@greendesk.com', '$2b$10$K7L1OJ45/4Y2nIvhRVpCe.FSmhDdWoXehVzJptJ/op0lSm58ZN3pq', 'Alice Smith', 'member')
+  ('a0000000-0000-0000-0000-000000000001', 'admin@greendesk.com', '$2b$10$68lDDvzwUXSrl1W17TMQa.kcDWsUKiy/pW7xU9FJh0O3ZzRBrR0ri', 'Admin User', 'admin'),
+  ('a0000000-0000-0000-0000-000000000002', 'alice@greendesk.com', '$2b$10$68lDDvzwUXSrl1W17TMQa.kcDWsUKiy/pW7xU9FJh0O3ZzRBrR0ri', 'Alice Smith', 'member')
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed floor

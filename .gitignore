@@ -54,3 +54,6 @@ temp/
 
 # Git worktrees
 .worktrees/
+
+# Embedded PostgreSQL data
+.pgdata/
