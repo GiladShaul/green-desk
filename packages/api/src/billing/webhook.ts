@@ -6,8 +6,8 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  if (!webhookSecret) {
-    res.status(500).json({ error: 'STRIPE_WEBHOOK_SECRET not configured' });
+  if (!stripe || !webhookSecret) {
+    res.status(503).json({ error: 'Billing not configured' });
     return;
   }
 

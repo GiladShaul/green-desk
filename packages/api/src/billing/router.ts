@@ -81,6 +81,11 @@ router.post('/checkout', requireAuth, requireAdmin, async (req: AuthRequest, res
   );
   const tenant = tenantResult.rows[0];
 
+  if (!stripe) {
+    res.status(503).json({ error: 'Billing not configured — set STRIPE_SECRET_KEY' });
+    return;
+  }
+
   let customerId = tenant.stripe_customer_id;
   if (!customerId) {
     const customer = await stripe.customers.create({
@@ -116,6 +121,11 @@ router.post('/portal', requireAuth, requireAdmin, async (req: AuthRequest, res: 
 
   if (!customerId) {
     res.status(400).json({ error: 'No active Stripe customer. Please subscribe first.' });
+    return;
+  }
+
+  if (!stripe) {
+    res.status(503).json({ error: 'Billing not configured — set STRIPE_SECRET_KEY' });
     return;
   }
 
