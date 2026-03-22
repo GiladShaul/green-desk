@@ -69,6 +69,11 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   }
 });
 
+// Prevent unhandled promise rejections from crashing the process (Express 4 async gap)
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason instanceof Error ? reason.message : reason);
+});
+
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`API server running on http://localhost:${PORT}`);
