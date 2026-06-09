@@ -16,6 +16,7 @@ import ssoRouter from './sso/router';
 import { startReminderScheduler } from './services/reminder-scheduler';
 import { handleStripeWebhook } from './billing/webhook';
 import billingRouter from './billing/router';
+import { purgeExpiredAuditLogs } from './services/audit';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -86,6 +87,11 @@ if (require.main === module) {
       .then((n) => console.log(`[recurring-bookings] generated ${n} booking(s) on startup`))
       .catch((err: unknown) => console.error('[recurring-bookings] startup generate error:', err));
     startReminderScheduler();
+    // Purge expired audit logs on startup, then every 24 hours
+    purgeExpiredAuditLogs().catch((err: unknown) => console.error('[audit] startup purge error:', err));
+    setInterval(() => {
+      purgeExpiredAuditLogs().catch((err: unknown) => console.error('[audit] purge error:', err));
+    }, 24 * 60 * 60 * 1000);
   });
 }
 

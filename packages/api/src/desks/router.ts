@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
+import { auditLog } from '../services/audit';
 
 const router = Router();
 
@@ -53,6 +54,7 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Respon
      RETURNING id, floor_id, label, x_position, y_position, status, created_at`,
     [floor_id, label.trim(), x_position ?? 0, y_position ?? 0, status ?? 'active', tenantId]
   );
+  auditLog(req, { action: 'create', resourceType: 'desk', resourceId: result.rows[0].id });
   res.status(201).json(result.rows[0]);
 });
 
@@ -103,6 +105,10 @@ router.patch('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Re
      RETURNING id, floor_id, label, x_position, y_position, status, created_at`,
     [newLabel, newX, newY, newStatus, id, tenantId]
   );
+  auditLog(req, {
+    action: 'update', resourceType: 'desk', resourceId: id,
+    changes: { label: { old: desk.label, new: newLabel }, status: { old: desk.status, new: newStatus } },
+  });
   res.json(result.rows[0]);
 });
 
@@ -118,6 +124,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: R
   }
 
   await query('UPDATE desks SET status = $1 WHERE id = $2 AND tenant_id = $3', ['inactive', id, tenantId]);
+  auditLog(req, { action: 'delete', resourceType: 'desk', resourceId: id });
   res.status(204).send();
 });
 

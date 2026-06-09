@@ -4,6 +4,15 @@ import jwt from 'jsonwebtoken';
 import { randomBytes } from 'crypto';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from './middleware';
+import { auditLogDirect } from '../services/audit';
+
+function getClientIp(req: Request): string | null {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    return (typeof forwarded === 'string' ? forwarded : forwarded[0]).split(',')[0].trim();
+  }
+  return (req.socket as { remoteAddress?: string })?.remoteAddress ?? null;
+}
 
 const router = Router();
 
@@ -92,6 +101,9 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   );
   const user = result.rows[0];
 
+  const ipAddress = getClientIp(req);
+  const userAgent = req.headers['user-agent'] ?? null;
+
   if (!user) {
     res.status(401).json({ error: 'Invalid credentials' });
     return;
@@ -104,10 +116,30 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) {
+    auditLogDirect({
+      tenantId: user.tenant_id,
+      actorId: user.id,
+      actorEmail: user.email,
+      action: 'login_failed',
+      resourceType: 'user',
+      resourceId: user.id,
+      ipAddress,
+      userAgent,
+    });
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
 
+  auditLogDirect({
+    tenantId: user.tenant_id,
+    actorId: user.id,
+    actorEmail: user.email,
+    action: 'login',
+    resourceType: 'user',
+    resourceId: user.id,
+    ipAddress,
+    userAgent,
+  });
   const token = signToken(user.id, user.role, user.tenant_id);
   res.status(200).json({
     token,

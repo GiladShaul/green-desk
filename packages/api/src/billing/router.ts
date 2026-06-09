@@ -3,6 +3,7 @@ import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { getPlanLimits } from './plans';
 import { stripe } from './stripe';
+import { auditLog } from '../services/audit';
 
 const router = Router();
 
@@ -106,6 +107,7 @@ router.post('/checkout', requireAuth, requireAdmin, async (req: AuthRequest, res
     metadata: { tenantId, planId },  // planId needed so webhook can update plan column
   });
 
+  auditLog(req, { action: 'create', resourceType: 'billing', changes: { planId } });
   res.json({ url: session.url });
 });
 

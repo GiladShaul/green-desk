@@ -3,6 +3,7 @@ import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { sendBookingConfirmation, sendBookingCancellation } from '../services/email';
 import { notifyBookingEvent } from '../services/webhook';
+import { auditLog } from '../services/audit';
 
 const router = Router();
 
@@ -68,6 +69,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     [desk_id, userId, date, start_time, end_time, tenantId]
   );
   const booking = result.rows[0];
+  auditLog(req, { action: 'create', resourceType: 'booking', resourceId: booking.id });
   res.status(201).json(booking);
 
   // Fire confirmation email non-blocking — do not await, never fail the booking
@@ -195,6 +197,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
   }
 
   await query('UPDATE bookings SET status = $1 WHERE id = $2 AND tenant_id = $3', ['cancelled', id, tenantId]);
+  auditLog(req, { action: 'delete', resourceType: 'booking', resourceId: id });
   res.status(204).send();
 
   // Fire cancellation email non-blocking

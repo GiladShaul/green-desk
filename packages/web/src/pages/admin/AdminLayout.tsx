@@ -49,6 +49,12 @@ export function AdminLayout() {
           >
             Billing
           </NavLink>
+          <NavLink
+            to="/admin/audit-log"
+            className={({ isActive }) => `${styles.navLink} ${isActive ? styles.active : ''}`}
+          >
+            Audit Log
+          </NavLink>
         </nav>
       </aside>
       <main className={styles.content}>

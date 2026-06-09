@@ -2,6 +2,7 @@ import { Router, Response, NextFunction } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { getTenantPlanLimits } from '../billing/plans';
+import { auditLog } from '../services/audit';
 
 const router = Router();
 
@@ -61,6 +62,7 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Respon
     'INSERT INTO floors (name, building, floor_number, tenant_id) VALUES ($1, $2, $3, $4) RETURNING id, name, building, floor_number, created_at',
     [name.trim(), building.trim(), floor_number, tenantId]
   );
+  auditLog(req, { action: 'create', resourceType: 'floor', resourceId: result.rows[0].id });
   res.status(201).json(result.rows[0]);
 });
 
@@ -101,6 +103,10 @@ router.patch('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Re
     'UPDATE floors SET name = $1, building = $2, floor_number = $3 WHERE id = $4 AND tenant_id = $5 RETURNING id, name, building, floor_number, created_at',
     [newName, newBuilding, newFloorNumber, id, tenantId]
   );
+  auditLog(req, {
+    action: 'update', resourceType: 'floor', resourceId: id,
+    changes: { name: { old: floor.name, new: newName }, building: { old: floor.building, new: newBuilding }, floor_number: { old: floor.floor_number, new: newFloorNumber } },
+  });
   res.json(result.rows[0]);
 });
 
@@ -125,6 +131,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: R
   }
 
   await query('DELETE FROM floors WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+  auditLog(req, { action: 'delete', resourceType: 'floor', resourceId: id });
   res.status(204).send();
 });
 

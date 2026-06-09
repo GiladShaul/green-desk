@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
+import { auditLog } from '../services/audit';
 
 const router = Router();
 
@@ -155,6 +156,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     [userId, desk_id, floor_id, day_of_week, start_time, end_time, start_date, endDateValue, tenantId]
   );
   const rb = result.rows[0];
+  auditLog(req, { action: 'create', resourceType: 'recurring_booking', resourceId: rb.id });
   res.status(201).json(rb);
 
   // Materialize bookings non-blocking
@@ -208,6 +210,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
   }
 
   await query('DELETE FROM recurring_bookings WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+  auditLog(req, { action: 'delete', resourceType: 'recurring_booking', resourceId: id });
   res.status(204).send();
 });
 

@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { notifyBookingEvent } from '../services/webhook';
+import { auditLog } from '../services/audit';
 
 const router = Router();
 
@@ -83,6 +84,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     [room_id, userId, room.floor_id, date, start_time, end_time, title ?? null, tenantId]
   );
   const booking = result.rows[0];
+  auditLog(req, { action: 'create', resourceType: 'room_booking', resourceId: booking.id });
   res.status(201).json(booking);
 
   // Fire webhook notification non-blocking
@@ -223,6 +225,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
   }
 
   await query('UPDATE room_bookings SET status = $1 WHERE id = $2 AND tenant_id = $3', ['cancelled', id, tenantId]);
+  auditLog(req, { action: 'delete', resourceType: 'room_booking', resourceId: id });
   res.status(204).send();
 });
 

@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
+import { auditLog } from '../services/audit';
 
 const router = Router();
 
@@ -76,6 +77,7 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Respon
     }
   }
 
+  auditLog(req, { action: 'create', resourceType: 'room', resourceId: room.id });
   res.status(201).json({ ...room, equipment: tags });
 });
 
@@ -156,6 +158,10 @@ router.patch('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Re
     tags = eqResult.rows.map(r => r.tag);
   }
 
+  auditLog(req, {
+    action: 'update', resourceType: 'room', resourceId: id,
+    changes: { name: { old: room.name, new: newName }, status: { old: room.status, new: newStatus }, capacity: { old: room.capacity, new: newCapacity } },
+  });
   res.json({ ...result.rows[0], equipment: tags });
 });
 

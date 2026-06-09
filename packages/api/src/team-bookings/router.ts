@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
+import { auditLog } from '../services/audit';
 
 const router = Router();
 
@@ -124,6 +125,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     ]
   );
 
+  auditLog(req, { action: 'create', resourceType: 'team_booking', resourceId: booking.id });
   res.status(201).json({ ...booking, desks: deskRows.rows });
 });
 
@@ -312,6 +314,7 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promi
     [id]
   );
 
+  auditLog(req, { action: 'update', resourceType: 'team_booking', resourceId: id });
   res.json({ ...tbResult.rows[0], desks: desksResult.rows });
 });
 
@@ -404,6 +407,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
   }
 
   await query('UPDATE team_bookings SET status = $1 WHERE id = $2 AND tenant_id = $3', ['cancelled', id, tenantId]);
+  auditLog(req, { action: 'delete', resourceType: 'team_booking', resourceId: id });
   res.status(204).send();
 });
 

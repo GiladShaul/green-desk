@@ -2,6 +2,7 @@ import { Router, Response, NextFunction } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { getTenantPlanLimits } from '../billing/plans';
+import { auditLog } from '../services/audit';
 
 const router = Router();
 
@@ -44,6 +45,7 @@ router.patch('/users/:id', requireAuth, requireAdmin, async (req: AuthRequest, r
     'UPDATE users SET role = $1 WHERE id = $2 AND tenant_id = $3 RETURNING id, email, name, role, created_at',
     [role, id, tenantId]
   );
+  auditLog(req, { action: 'update', resourceType: 'user', resourceId: id, changes: { role: { new: role } } });
   res.json(result.rows[0]);
 });
 
@@ -251,6 +253,7 @@ router.post('/sso-connections', requireAuth, requireAdmin, async (req: AuthReque
      RETURNING id, name, provider_type, config, enabled, created_at, updated_at`,
     [name, provider_type as SsoProviderType, JSON.stringify(config ?? {}), tenantId],
   );
+  auditLog(req, { action: 'create', resourceType: 'sso_connection', resourceId: (result.rows[0] as { id: string }).id });
   res.status(201).json(result.rows[0]);
 });
 
@@ -299,6 +302,7 @@ router.patch('/sso-connections/:id', requireAuth, requireAdmin, async (req: Auth
   const safeConfig = { ...rowConfig };
   delete safeConfig.client_secret;
   delete safeConfig.idp_certificate;
+  auditLog(req, { action: 'update', resourceType: 'sso_connection', resourceId: id });
   res.json({ ...row, config: safeConfig });
 });
 
@@ -314,6 +318,7 @@ router.delete('/sso-connections/:id', requireAuth, requireAdmin, async (req: Aut
   }
 
   await query('DELETE FROM sso_connections WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+  auditLog(req, { action: 'delete', resourceType: 'sso_connection', resourceId: id });
   res.status(204).end();
 });
 
@@ -371,6 +376,7 @@ router.post('/integrations', requireAuth, requireAdmin, async (req: AuthRequest,
      RETURNING id, name, provider, webhook_url, events, enabled, created_at, updated_at`,
     [name, provider as IntegrationProvider, webhook_url, JSON.stringify(eventsArr), tenantId],
   );
+  auditLog(req, { action: 'create', resourceType: 'integration', resourceId: (result.rows[0] as { id: string }).id });
   res.status(201).json(result.rows[0]);
 });
 
@@ -427,6 +433,7 @@ router.patch('/integrations/:id', requireAuth, requireAdmin, async (req: AuthReq
      RETURNING id, name, provider, webhook_url, events, enabled, created_at, updated_at`,
     params,
   );
+  auditLog(req, { action: 'update', resourceType: 'integration', resourceId: id });
   res.json(result.rows[0]);
 });
 
@@ -442,6 +449,7 @@ router.delete('/integrations/:id', requireAuth, requireAdmin, async (req: AuthRe
   }
 
   await query('DELETE FROM integrations WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+  auditLog(req, { action: 'delete', resourceType: 'integration', resourceId: id });
   res.status(204).end();
 });
 
@@ -496,7 +504,74 @@ router.post('/users', requireAuth, requireAdmin, async (req: AuthRequest, res: R
     'INSERT INTO users (email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, role, created_at',
     [email.trim().toLowerCase(), passwordHash, name.trim(), 'member', tenantId]
   );
+  auditLog(req, { action: 'create', resourceType: 'user', resourceId: result.rows[0].id });
   res.status(201).json(result.rows[0]);
+});
+
+// ── Audit Logs ─────────────────────────────────────────────────────────────
+
+// GET /api/admin/audit-logs — paginated audit log (admin only)
+router.get('/audit-logs', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const tenantId = req.user!.tenantId;
+  const {
+    page: pageParam,
+    pageSize: pageSizeParam,
+    from,
+    to,
+    actor,
+    resourceType,
+    action,
+  } = req.query as Record<string, string>;
+
+  const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1);
+  const pageSize = Math.min(200, Math.max(1, parseInt(pageSizeParam ?? '50', 10) || 50));
+  const offset = (page - 1) * pageSize;
+
+  const conditions: string[] = ['al.tenant_id = $1'];
+  const params: unknown[] = [tenantId];
+
+  if (from) {
+    params.push(from);
+    conditions.push(`al.created_at >= $${params.length}::timestamptz`);
+  }
+  if (to) {
+    params.push(to);
+    conditions.push(`al.created_at <= $${params.length}::timestamptz`);
+  }
+  if (actor) {
+    params.push(`%${actor}%`);
+    conditions.push(`al.actor_email ILIKE $${params.length}`);
+  }
+  if (resourceType) {
+    params.push(resourceType);
+    conditions.push(`al.resource_type = $${params.length}`);
+  }
+  if (action) {
+    params.push(action);
+    conditions.push(`al.action = $${params.length}`);
+  }
+
+  const where = conditions.join(' AND ');
+
+  const totalResult = await query<{ count: string }>(
+    `SELECT COUNT(*) AS count FROM audit_logs al WHERE ${where}`,
+    params,
+  );
+  const total = parseInt(totalResult.rows[0].count, 10);
+
+  params.push(pageSize);
+  params.push(offset);
+  const logsResult = await query(
+    `SELECT al.id, al.actor_id, al.actor_email, al.action, al.resource_type,
+            al.resource_id, al.changes, al.ip_address, al.user_agent, al.created_at
+     FROM audit_logs al
+     WHERE ${where}
+     ORDER BY al.created_at DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params,
+  );
+
+  res.json({ logs: logsResult.rows, total, page, pageSize });
 });
 
 export default router;
