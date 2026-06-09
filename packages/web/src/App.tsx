@@ -19,6 +19,7 @@ import { AdminSSO } from './pages/admin/AdminSSO';
 import { AdminIntegrations } from './pages/admin/AdminIntegrations';
 import { AdminBilling } from './pages/admin/AdminBilling';
 import { AdminAuditLog } from './pages/admin/AdminAuditLog';
+import { AdminApiKeys } from './pages/admin/AdminApiKeys';
 import { SsoCallback } from './pages/SsoCallback';
 
 function App() {
@@ -46,6 +47,7 @@ function App() {
                   <Route path="/admin/integrations" element={<AdminIntegrations />} />
                   <Route path="/admin/billing" element={<AdminBilling />} />
                   <Route path="/admin/audit-log" element={<AdminAuditLog />} />
+                  <Route path="/admin/api-keys" element={<AdminApiKeys />} />
                 </Route>
               </Route>
             </Route>

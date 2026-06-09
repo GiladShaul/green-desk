@@ -17,6 +17,9 @@ import { startReminderScheduler } from './services/reminder-scheduler';
 import { handleStripeWebhook } from './billing/webhook';
 import billingRouter from './billing/router';
 import { purgeExpiredAuditLogs } from './services/audit';
+import apiKeysRouter from './api-keys/router';
+import v1Router from './v1/router';
+import docsRouter from './docs/router';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -65,6 +68,9 @@ app.use('/api/rooms', roomsRouter);
 app.use('/api/room-bookings', roomBookingsRouter);
 app.use('/api/team-bookings', teamBookingsRouter);
 app.use('/api/billing', billingRouter);
+app.use('/api/admin/api-keys', apiKeysRouter);
+app.use('/api/v1', v1Router);
+app.use('/api/docs', docsRouter);
 
 // Global error handler — catches unhandled async errors so the process doesn't crash
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

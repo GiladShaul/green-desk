@@ -55,6 +55,12 @@ export function AdminLayout() {
           >
             Audit Log
           </NavLink>
+          <NavLink
+            to="/admin/api-keys"
+            className={({ isActive }) => `${styles.navLink} ${isActive ? styles.active : ''}`}
+          >
+            API Keys
+          </NavLink>
         </nav>
       </aside>
       <main className={styles.content}>
