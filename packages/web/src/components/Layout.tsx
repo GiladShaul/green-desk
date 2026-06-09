@@ -20,6 +20,7 @@ export function Layout() {
         </div>
         <div className={styles.navLinks}>
           <Link to="/bookings" className={styles.navLink}>My Bookings</Link>
+          <Link to="/settings/calendar" className={styles.navLink}>Calendar</Link>
           {user?.role === 'admin' && (
             <Link to="/admin/floors" className={styles.navLink}>Admin</Link>
           )}
@@ -43,6 +44,7 @@ export function Layout() {
             <span className={styles.mobileTenantName}>{user.tenantName}</span>
           )}
           <Link to="/bookings" className={styles.mobileLink} onClick={closeMenu}>My Bookings</Link>
+          <Link to="/settings/calendar" className={styles.mobileLink} onClick={closeMenu}>Calendar</Link>
           {user?.role === 'admin' && (
             <Link to="/admin/floors" className={styles.mobileLink} onClick={closeMenu}>Admin</Link>
           )}

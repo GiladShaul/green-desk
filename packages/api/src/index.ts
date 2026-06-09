@@ -20,6 +20,7 @@ import { purgeExpiredAuditLogs } from './services/audit';
 import apiKeysRouter from './api-keys/router';
 import v1Router from './v1/router';
 import docsRouter from './docs/router';
+import calendarRouter from './calendar/router';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -71,6 +72,7 @@ app.use('/api/billing', billingRouter);
 app.use('/api/admin/api-keys', apiKeysRouter);
 app.use('/api/v1', v1Router);
 app.use('/api/docs', docsRouter);
+app.use('/api/calendar', calendarRouter);
 
 // Global error handler — catches unhandled async errors so the process doesn't crash
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

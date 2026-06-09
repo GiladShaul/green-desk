@@ -1,0 +1,163 @@
+.page {
+  max-width: 680px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: #212529;
+}
+
+.subtitle {
+  color: #6c757d;
+  margin: 0 0 2rem 0;
+  font-size: 0.95rem;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.providerIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+
+.googleIcon {
+  background: #fff3f3;
+  color: #ea4335;
+  border: 1px solid #f9c4c4;
+}
+
+.microsoftIcon {
+  background: #f0f4ff;
+  color: #0078d4;
+  border: 1px solid #c8d8f8;
+}
+
+.providerName {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 0.3rem 0.7rem;
+  border-radius: 20px;
+}
+
+.connected {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.expired {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.disconnected {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.connectBtn {
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: #2563eb;
+  color: #fff;
+  transition: background 0.15s;
+}
+
+.connectBtn:hover {
+  background: #1d4ed8;
+}
+
+.disconnectBtn {
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  border: 1px solid #dc2626;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  color: #dc2626;
+  transition: background 0.15s;
+}
+
+.disconnectBtn:hover {
+  background: #fee2e2;
+}
+
+.connectedAt {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  margin-top: 0.75rem;
+}
+
+.alert {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.alertSuccess {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.alertError {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+
+.loading {
+  color: #6c757d;
+  margin-top: 2rem;
+}

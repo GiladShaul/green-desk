@@ -21,6 +21,7 @@ import { AdminBilling } from './pages/admin/AdminBilling';
 import { AdminAuditLog } from './pages/admin/AdminAuditLog';
 import { AdminApiKeys } from './pages/admin/AdminApiKeys';
 import { SsoCallback } from './pages/SsoCallback';
+import { CalendarSettings } from './pages/CalendarSettings';
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/floors/:id" element={<FloorView />} />
               <Route path="/bookings" element={<MyBookings />} />
+              <Route path="/settings/calendar" element={<CalendarSettings />} />
               <Route element={<AdminRoute />}>
                 <Route element={<AdminLayout />}>
                   <Route path="/admin/floors" element={<AdminFloors />} />

@@ -4,6 +4,7 @@ import { requireAuth, AuthRequest } from '../auth/middleware';
 import { sendBookingConfirmation, sendBookingCancellation } from '../services/email';
 import { notifyBookingEvent } from '../services/webhook';
 import { auditLog } from '../services/audit';
+import { syncBookingCreated, syncBookingCancelled } from '../services/calendar';
 
 const router = Router();
 
@@ -100,6 +101,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
       tenantId,
     );
   }).catch((err: unknown) => console.error('[email] booking confirmation error:', err));
+
+  // Sync to calendar non-blocking
+  syncBookingCreated(booking.id, userId).catch((err: unknown) => console.error('[calendar] sync create error:', err));
 });
 
 // GET /api/bookings/me — list current user's bookings (upcoming + past)
@@ -228,6 +232,9 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
       tenantId,
     );
   }).catch((err: unknown) => console.error('[email] booking cancellation error:', err));
+
+  // Sync cancellation to calendar non-blocking
+  syncBookingCancelled(id).catch((err: unknown) => console.error('[calendar] sync cancel error:', err));
 });
 
 export default router;
