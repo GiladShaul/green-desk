@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "migrate": "node dist/migrate.js",
-    "test": "jest --forceExit"
+    "test": "jest --forceExit",
+    "test:integration": "jest --config jest.integration.config.js"
   },
   "jest": {
     "preset": "ts-jest",
@@ -18,6 +19,10 @@
     ],
     "testMatch": [
       "**/__tests__/**/*.test.ts"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/__tests__/integration/"
     ]
   },
   "dependencies": {
