@@ -3,6 +3,8 @@ import path from 'path';
 config({ path: path.resolve(__dirname, '..', '..', '..', '.env') });
 
 import express, { Request, Response, NextFunction } from 'express';
+import pinoHttp from 'pino-http';
+import { logger } from './logger';
 import authRouter from './auth/router';
 import floorsRouter from './floors/router';
 import desksRouter from './desks/router';
@@ -24,6 +26,9 @@ import calendarRouter from './calendar/router';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Request logging
+app.use(pinoHttp({ logger }));
 
 // CORS
 const corsOrigin = process.env.CORS_ORIGIN;
@@ -76,7 +81,7 @@ app.use('/api/calendar', calendarRouter);
 
 // Global error handler — catches unhandled async errors so the process doesn't crash
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('[unhandled]', err.message);
+  logger.error({ err }, '[unhandled] request error');
   if (!res.headersSent) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -84,21 +89,21 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 // Prevent unhandled promise rejections from crashing the process (Express 4 async gap)
 process.on('unhandledRejection', (reason) => {
-  console.error('[unhandledRejection]', reason instanceof Error ? reason.message : reason);
+  logger.error({ reason }, '[unhandledRejection]');
 });
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`API server running on http://localhost:${PORT}`);
+    logger.info(`API server running on http://localhost:${PORT}`);
     // Materialize recurring bookings on startup
     generateRecurringBookings()
-      .then((n) => console.log(`[recurring-bookings] generated ${n} booking(s) on startup`))
-      .catch((err: unknown) => console.error('[recurring-bookings] startup generate error:', err));
+      .then((n) => logger.info(`[recurring-bookings] generated ${n} booking(s) on startup`))
+      .catch((err: unknown) => logger.error({ err }, '[recurring-bookings] startup generate error'));
     startReminderScheduler();
     // Purge expired audit logs on startup, then every 24 hours
-    purgeExpiredAuditLogs().catch((err: unknown) => console.error('[audit] startup purge error:', err));
+    purgeExpiredAuditLogs().catch((err: unknown) => logger.error({ err }, '[audit] startup purge error'));
     setInterval(() => {
-      purgeExpiredAuditLogs().catch((err: unknown) => console.error('[audit] purge error:', err));
+      purgeExpiredAuditLogs().catch((err: unknown) => logger.error({ err }, '[audit] purge error'));
     }, 24 * 60 * 60 * 1000);
   });
 }

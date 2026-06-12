@@ -1,4 +1,5 @@
 import { query } from '../db';
+import { logger } from '../logger';
 
 export type BookingEventType = 'booking_confirmed' | 'booking_cancelled' | 'booking_reminder';
 
@@ -142,10 +143,10 @@ async function postWebhook(url: string, payload: unknown): Promise<void> {
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
-      console.error(`[webhook] POST to ${url} failed: HTTP ${res.status}`);
+      logger.error(`[webhook] POST to ${url} failed: HTTP ${res.status}`);
     }
   } catch (err) {
-    console.error(`[webhook] POST to ${url} error:`, err);
+    logger.error({ err }, `[webhook] POST to ${url} error`);
   }
 }
 
@@ -165,7 +166,7 @@ export async function notifyBookingEvent(
     );
     rows = result.rows;
   } catch (err) {
-    console.error('[webhook] Failed to fetch integrations:', err);
+    logger.error({ err }, '[webhook] Failed to fetch integrations');
     return;
   }
 

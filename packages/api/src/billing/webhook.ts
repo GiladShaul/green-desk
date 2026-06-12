@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { stripe } from './stripe';
 import { query } from '../db';
+import { logger } from '../logger';
 
 export async function handleStripeWebhook(req: Request, res: Response): Promise<void> {
   const sig = req.headers['stripe-signature'];
@@ -52,7 +53,7 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
     }
 
     case 'invoice.payment_failed': {
-      console.warn(`[billing] invoice.payment_failed for subscription: ${data.subscription}`);
+      logger.warn(`[billing] invoice.payment_failed for subscription: ${data.subscription}`);
       break;
     }
 

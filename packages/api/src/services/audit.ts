@@ -1,5 +1,6 @@
 import { query } from '../db';
 import { AuthRequest } from '../auth/middleware';
+import { logger } from '../logger';
 
 export type AuditAction = 'create' | 'update' | 'delete' | 'login' | 'logout' | 'login_failed';
 export type AuditResourceType =
@@ -43,7 +44,7 @@ function writeAuditLog(params: AuditParams): void {
       params.ipAddress ?? null,
       params.userAgent ?? null,
     ],
-  ).catch((err: unknown) => console.error('[audit] write error:', err));
+  ).catch((err: unknown) => logger.error({ err }, '[audit] write error'));
 }
 
 function getClientIp(req: AuthRequest): string | null {
@@ -79,7 +80,7 @@ export function auditLog(
         userAgent,
       });
     })
-    .catch((err: unknown) => console.error('[audit] email lookup error:', err));
+    .catch((err: unknown) => logger.error({ err }, '[audit] email lookup error'));
 }
 
 export function auditLogDirect(params: AuditParams): void {
@@ -98,6 +99,6 @@ export async function purgeExpiredAuditLogs(): Promise<void> {
   );
   const count = parseInt(result.rows[0]?.count ?? '0', 10);
   if (count > 0) {
-    console.log(`[audit] purged ${count} expired log(s) (retention: ${retentionDays} days)`);
+    logger.info(`[audit] purged ${count} expired log(s) (retention: ${retentionDays} days)`);
   }
 }

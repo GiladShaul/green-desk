@@ -1,5 +1,6 @@
 import { query } from '../db';
 import { notifyBookingEvent } from './webhook';
+import { logger } from '../logger';
 
 // How many minutes before a booking the reminder fires (±WINDOW_MINUTES tolerance)
 const REMIND_BEFORE_MINUTES = 30;
@@ -91,12 +92,12 @@ async function sendPendingReminders(): Promise<void> {
         [b.id, b.booking_type],
       );
     } catch (err) {
-      console.error(`[reminder] Failed to send reminder for booking ${b.id}:`, err);
+      logger.error({ err }, `[reminder] Failed to send reminder for booking ${b.id}`);
     }
   }
 
   if (pending.length > 0) {
-    console.log(`[reminder] Sent ${pending.length} reminder(s)`);
+    logger.info(`[reminder] Sent ${pending.length} reminder(s)`);
   }
 }
 
@@ -104,10 +105,10 @@ let _schedulerTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startReminderScheduler(intervalMs = 60_000): void {
   if (_schedulerTimer) return; // already running
-  console.log('[reminder] Scheduler started (interval:', intervalMs, 'ms)');
+  logger.info(`[reminder] Scheduler started (interval: ${intervalMs} ms)`);
   _schedulerTimer = setInterval(() => {
     sendPendingReminders().catch((err: unknown) =>
-      console.error('[reminder] Scheduler error:', err),
+      logger.error({ err }, '[reminder] Scheduler error'),
     );
   }, intervalMs);
 }

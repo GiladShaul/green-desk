@@ -1,4 +1,5 @@
 import nodemailer, { Transporter, SendMailOptions } from 'nodemailer';
+import { logger } from '../logger';
 
 export interface EmailUser {
   id: string;
@@ -67,10 +68,10 @@ async function send(options: SendMailOptions): Promise<void> {
     const info = await transport.sendMail(options);
     if (!process.env.SMTP_HOST) {
       // jsonTransport — log to console in dev
-      console.log('[email]', (info as { message?: string }).message ?? JSON.stringify(info));
+      logger.debug({ message: (info as { message?: string }).message ?? JSON.stringify(info) }, '[email] dev transport');
     }
   } catch (err) {
-    console.error('[email] Failed to send email:', err);
+    logger.error({ err }, '[email] Failed to send email');
     // Non-blocking: swallow error so caller is unaffected
   }
 }

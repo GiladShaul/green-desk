@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { google } from 'googleapis';
 import { query } from '../db';
+import { logger } from '../logger';
 
 // ---------------------------------------------------------------------------
 // Token encryption (AES-256-GCM)
@@ -101,7 +102,7 @@ async function getValidGoogleTokens(conn: CalendarConnection): Promise<{ accessT
 
     return { accessToken: decryptToken(conn.access_token_encrypted) };
   } catch (err) {
-    console.error(`[calendar] Google token refresh failed for connection ${conn.id}:`, err);
+    logger.error({ err }, `[calendar] Google token refresh failed for connection ${conn.id}`);
     await query(
       `UPDATE user_calendar_connections SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`,
       [conn.id],
@@ -200,7 +201,7 @@ async function refreshMicrosoftTokens(conn: CalendarConnection): Promise<MSToken
 
     return { accessToken: data.access_token, refreshToken: newRefresh, expiresAt };
   } catch (err) {
-    console.error(`[calendar] Microsoft token refresh failed for connection ${conn.id}:`, err);
+    logger.error({ err }, `[calendar] Microsoft token refresh failed for connection ${conn.id}`);
     await query(
       `UPDATE user_calendar_connections SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`,
       [conn.id],
@@ -317,7 +318,7 @@ export async function syncBookingCreated(bookingId: string, userId: string): Pro
         );
       }
     } catch (err) {
-      console.error(`[calendar] sync create failed for connection ${conn.id}:`, err);
+      logger.error({ err }, `[calendar] sync create failed for connection ${conn.id}`);
     }
   }
 }
@@ -358,7 +359,7 @@ export async function syncBookingCancelled(bookingId: string): Promise<void> {
 
       await query('DELETE FROM booking_calendar_events WHERE id = $1', [ev.id]);
     } catch (err) {
-      console.error(`[calendar] sync cancel failed for event ${ev.id}:`, err);
+      logger.error({ err }, `[calendar] sync cancel failed for event ${ev.id}`);
     }
   }
 }
