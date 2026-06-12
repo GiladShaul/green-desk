@@ -5,6 +5,7 @@ config({ path: path.resolve(__dirname, '..', '..', '..', '.env') });
 import express, { Request, Response, NextFunction } from 'express';
 import pinoHttp from 'pino-http';
 import { logger } from './logger';
+import pool from './db';
 import authRouter from './auth/router';
 import floorsRouter from './floors/router';
 import desksRouter from './desks/router';
@@ -57,6 +58,15 @@ app.get('/', (_req, res) => {
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/ready', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ready' });
+  } catch {
+    res.status(503).json({ status: 'not ready' });
+  }
 });
 
 app.get('/api/health', (_req, res) => {

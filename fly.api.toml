@@ -1,0 +1,37 @@
+# Fly.io configuration for the Green Desk API
+# Deploy: flyctl deploy --config fly.api.toml
+# First deploy: flyctl launch --config fly.api.toml --no-deploy (to create the app)
+
+app = 'green-desk-api'
+primary_region = 'iad'
+
+[build]
+  dockerfile = 'packages/api/Dockerfile'
+
+[env]
+  PORT = '3001'
+  NODE_ENV = 'production'
+
+# Run DB migrations once before new instances go live (release_command runs the
+# old image's CMD is replaced — safe because migrations are idempotent).
+[deploy]
+  release_command = 'node dist/migrate.js'
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = '30s'
+    interval = '15s'
+    method = 'GET'
+    path = '/health'
+    timeout = '10s'
+
+[[vm]]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1
