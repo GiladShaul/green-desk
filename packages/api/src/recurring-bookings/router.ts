@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { auditLog } from '../services/audit';
+import { logger } from '../logger';
 
 const router = Router();
 
@@ -161,7 +162,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
 
   // Materialize bookings non-blocking
   generateRecurringBookings().catch((err: unknown) =>
-    console.error('[recurring-bookings] generate error:', err)
+    logger.error({ err }, '[recurring-bookings] generate error')
   );
 });
 

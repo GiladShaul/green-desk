@@ -3,6 +3,7 @@ import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { notifyBookingEvent } from '../services/webhook';
 import { auditLog } from '../services/audit';
+import { logger } from '../logger';
 
 const router = Router();
 
@@ -105,7 +106,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
       { name: userResult.rows[0].name, email: userResult.rows[0].email },
       tenantId,
     );
-  }).catch((err: unknown) => console.error('[webhook] room booking notification error:', err));
+  }).catch((err: unknown) => logger.error({ err }, '[webhook] room booking notification error'));
 });
 
 // GET /api/room-bookings/me — list current user's room bookings

@@ -61,9 +61,14 @@ const DOCS_HTML = `<!DOCTYPE html>
 
   <h2>Rate Limiting</h2>
   <div class="card">
-    <p>Each API key is limited to <strong>100 requests per minute</strong>. Exceeding this limit returns:</p>
+    <p>Each API key is limited to <strong>100 requests per 15 minutes</strong> (configurable via <code>RATE_LIMIT_MAX</code> and <code>RATE_LIMIT_WINDOW_MS</code> env vars). Every response includes standard rate limit headers:</p>
+    <pre><code>RateLimit-Limit: 100
+RateLimit-Remaining: 99
+RateLimit-Reset: 1716300000
+RateLimit-Policy: 100;w=900</code></pre>
+    <p>Exceeding this limit returns:</p>
     <pre><code>HTTP 429 Too Many Requests
-{ "error": "Rate limit exceeded (100 req/min)", "code": "RATE_LIMIT_EXCEEDED" }</code></pre>
+{ "error": "Rate limit exceeded", "code": "RATE_LIMIT_EXCEEDED" }</code></pre>
   </div>
 
   <h2>Scopes</h2>

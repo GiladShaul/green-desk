@@ -5,6 +5,7 @@ import { sendBookingConfirmation, sendBookingCancellation } from '../services/em
 import { notifyBookingEvent } from '../services/webhook';
 import { auditLog } from '../services/audit';
 import { syncBookingCreated, syncBookingCancelled } from '../services/calendar';
+import { logger } from '../logger';
 
 const router = Router();
 
@@ -100,10 +101,10 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
       { name: userResult.rows[0].name, email: userResult.rows[0].email },
       tenantId,
     );
-  }).catch((err: unknown) => console.error('[email] booking confirmation error:', err));
+  }).catch((err: unknown) => logger.error({ err }, '[email] booking confirmation error'));
 
   // Sync to calendar non-blocking
-  syncBookingCreated(booking.id, userId).catch((err: unknown) => console.error('[calendar] sync create error:', err));
+  syncBookingCreated(booking.id, userId).catch((err: unknown) => logger.error({ err }, '[calendar] sync create error'));
 });
 
 // GET /api/bookings/me — list current user's bookings (upcoming + past)
@@ -231,10 +232,10 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
       { name: userResult.rows[0].name, email: userResult.rows[0].email },
       tenantId,
     );
-  }).catch((err: unknown) => console.error('[email] booking cancellation error:', err));
+  }).catch((err: unknown) => logger.error({ err }, '[email] booking cancellation error'));
 
   // Sync cancellation to calendar non-blocking
-  syncBookingCancelled(id).catch((err: unknown) => console.error('[calendar] sync cancel error:', err));
+  syncBookingCancelled(id).catch((err: unknown) => logger.error({ err }, '[calendar] sync cancel error'));
 });
 
 export default router;

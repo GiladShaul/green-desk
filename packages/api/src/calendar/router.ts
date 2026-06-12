@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { encryptToken, decryptToken, buildGoogleOAuth2Client } from '../services/calendar';
+import { logger } from '../logger';
 
 const router = Router();
 
@@ -130,7 +131,7 @@ router.get('/google/callback', async (req: AuthRequest, res: Response): Promise<
 
     res.redirect(`${frontendUrl()}/settings/calendar?connected=google`);
   } catch (err) {
-    console.error('[calendar] Google callback error:', err);
+    logger.error({ err }, '[calendar] Google callback error');
     res.redirect(`${frontendUrl()}/settings/calendar?error=google_callback_failed`);
   }
 });
@@ -240,7 +241,7 @@ router.get('/microsoft/callback', async (req: AuthRequest, res: Response): Promi
 
     res.redirect(`${frontendUrl()}/settings/calendar?connected=microsoft`);
   } catch (err) {
-    console.error('[calendar] Microsoft callback error:', err);
+    logger.error({ err }, '[calendar] Microsoft callback error');
     res.redirect(`${frontendUrl()}/settings/calendar?error=microsoft_callback_failed`);
   }
 });
