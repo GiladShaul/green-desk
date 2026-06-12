@@ -6,7 +6,7 @@ const sentryDsn = process.env.VITE_SENTRY_DSN;
 export default defineConfig({
   plugins: [react()],
   build: {
-    sourcemap: sentryDsn ? true : false,
+    sourcemap: sentryDsn ? 'hidden' : false,
   },
   server: {
     port: 5173,
