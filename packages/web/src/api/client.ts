@@ -15,9 +15,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  const data = await res.json();
+  const text = await res.text();
+  const data = text ? (JSON.parse(text) as unknown) : null;
   if (!res.ok) {
-    throw new Error((data as { error?: string }).error ?? `Request failed: ${res.status}`);
+    throw new Error((data as { error?: string } | null)?.error ?? `Request failed: ${res.status}`);
   }
   return data as T;
 }
