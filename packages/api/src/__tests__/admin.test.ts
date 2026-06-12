@@ -22,6 +22,7 @@ const userB = { id: 'user-2', email: 'bob@example.com', name: 'Bob', role: 'memb
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockQuery.mockImplementation(() => Promise.resolve({ rows: [] }));
 });
 
 // ---------------------------------------------------------------------------

@@ -26,6 +26,7 @@ const existingUser = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockQuery.mockImplementation(() => Promise.resolve({ rows: [] }));
 });
 
 // ---------------------------------------------------------------------------

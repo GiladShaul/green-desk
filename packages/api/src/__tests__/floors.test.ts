@@ -23,6 +23,7 @@ const desk2 = { id: 'desk-2', floor_id: 'floor-1', label: 'A-02', x_position: 20
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockQuery.mockImplementation(() => Promise.resolve({ rows: [] }));
 });
 
 // ---------------------------------------------------------------------------

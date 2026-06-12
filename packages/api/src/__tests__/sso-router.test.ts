@@ -43,6 +43,7 @@ process.env.FRONTEND_URL = 'http://localhost:5173';
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockQuery.mockImplementation(() => Promise.resolve({ rows: [] }));
 });
 
 describe('GET /api/auth/sso/connections', () => {

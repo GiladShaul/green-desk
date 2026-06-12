@@ -26,7 +26,10 @@ const sampleConn = {
   updated_at: new Date().toISOString(),
 };
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockQuery.mockImplementation(() => Promise.resolve({ rows: [] }));
+});
 
 describe('GET /api/admin/sso-connections', () => {
   test('returns list for admin', async () => {
