@@ -2,6 +2,7 @@ import { Router, Response, NextFunction } from 'express';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { auditLog } from '../services/audit';
+import { cacheInvalidate, CacheKeys } from '../cache';
 
 const router = Router();
 
@@ -55,6 +56,7 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Respon
     [floor_id, label.trim(), x_position ?? 0, y_position ?? 0, status ?? 'active', tenantId]
   );
   auditLog(req, { action: 'create', resourceType: 'desk', resourceId: result.rows[0].id });
+  await cacheInvalidate(CacheKeys.floorDesks(floor_id as string, tenantId));
   res.status(201).json(result.rows[0]);
 });
 
@@ -109,6 +111,7 @@ router.patch('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Re
     action: 'update', resourceType: 'desk', resourceId: id,
     changes: { label: { old: desk.label, new: newLabel }, status: { old: desk.status, new: newStatus } },
   });
+  await cacheInvalidate(CacheKeys.floorDesks(desk.floor_id, tenantId));
   res.json(result.rows[0]);
 });
 
@@ -117,7 +120,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: R
   const { id } = req.params;
   const tenantId = req.user!.tenantId;
 
-  const existing = await query<{ id: string }>('SELECT id FROM desks WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+  const existing = await query<{ id: string; floor_id: string }>('SELECT id, floor_id FROM desks WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
   if (existing.rows.length === 0) {
     res.status(404).json({ error: 'Desk not found' });
     return;
@@ -125,6 +128,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: R
 
   await query('UPDATE desks SET status = $1 WHERE id = $2 AND tenant_id = $3', ['inactive', id, tenantId]);
   auditLog(req, { action: 'delete', resourceType: 'desk', resourceId: id });
+  await cacheInvalidate(CacheKeys.floorDesks(existing.rows[0].floor_id, tenantId));
   res.status(204).send();
 });
 

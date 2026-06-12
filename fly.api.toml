@@ -1,6 +1,8 @@
 # Fly.io configuration for the Green Desk API
 # Deploy: flyctl deploy --config fly.api.toml
 # First deploy: flyctl launch --config fly.api.toml --no-deploy (to create the app)
+# Redis (Upstash): flyctl redis create --name green-desk-redis --region iad
+#   then: flyctl secrets set REDIS_URL="$(flyctl redis status green-desk-redis --json | jq -r .privateUrl)" --config fly.api.toml
 
 app = 'green-desk-api'
 primary_region = 'iad'

@@ -1,4 +1,5 @@
 import { query } from '../db';
+import { cacheGet, cacheSet, CacheKeys } from '../cache';
 
 export interface PlanLimits {
   maxUsers: number | null;   // null = unlimited
@@ -20,6 +21,10 @@ export async function getTenantPlanLimits(tenantId: string): Promise<{
   limits: PlanLimits;
   seatsLimit: number | null;
 }> {
+  const cacheKey = CacheKeys.tenantPlan(tenantId);
+  const cached = await cacheGet<{ plan: string; limits: PlanLimits; seatsLimit: number | null }>(cacheKey);
+  if (cached) return cached;
+
   const result = await query<{ plan: string; plan_seats_limit: number | null }>(
     'SELECT plan, plan_seats_limit FROM tenants WHERE id = $1',
     [tenantId]
@@ -27,5 +32,7 @@ export async function getTenantPlanLimits(tenantId: string): Promise<{
   const row = result.rows[0];
   const plan = row?.plan ?? 'free';
   const limits = getPlanLimits(plan);
-  return { plan, limits, seatsLimit: row?.plan_seats_limit ?? limits.maxUsers };
+  const value = { plan, limits, seatsLimit: row?.plan_seats_limit ?? limits.maxUsers };
+  await cacheSet(cacheKey, value);
+  return value;
 }

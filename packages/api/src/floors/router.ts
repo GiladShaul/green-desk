@@ -3,6 +3,7 @@ import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { getTenantPlanLimits } from '../billing/plans';
 import { auditLog } from '../services/audit';
+import { cacheGet, cacheSet, cacheInvalidate, CacheKeys } from '../cache';
 
 const router = Router();
 
@@ -14,13 +15,19 @@ function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void
   next();
 }
 
+type FloorRow = { id: string; name: string; building: string; floor_number: number; created_at: string };
+
 // GET /api/floors — list all floors for current tenant
 router.get('/', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const tenantId = req.user!.tenantId;
-  const result = await query<{ id: string; name: string; building: string; floor_number: number; created_at: string }>(
+  const cacheKey = CacheKeys.floorList(tenantId);
+  const cached = await cacheGet<FloorRow[]>(cacheKey);
+  if (cached) { res.json(cached); return; }
+  const result = await query<FloorRow>(
     'SELECT id, name, building, floor_number, created_at FROM floors WHERE tenant_id = $1 ORDER BY building, floor_number',
     [tenantId]
   );
+  await cacheSet(cacheKey, result.rows);
   res.json(result.rows);
 });
 
@@ -63,6 +70,7 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthRequest, res: Respon
     [name.trim(), building.trim(), floor_number, tenantId]
   );
   auditLog(req, { action: 'create', resourceType: 'floor', resourceId: result.rows[0].id });
+  await cacheInvalidate(CacheKeys.floorList(tenantId));
   res.status(201).json(result.rows[0]);
 });
 
@@ -107,6 +115,7 @@ router.patch('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Re
     action: 'update', resourceType: 'floor', resourceId: id,
     changes: { name: { old: floor.name, new: newName }, building: { old: floor.building, new: newBuilding }, floor_number: { old: floor.floor_number, new: newFloorNumber } },
   });
+  await cacheInvalidate(CacheKeys.floorList(tenantId), CacheKeys.floor(id, tenantId));
   res.json(result.rows[0]);
 });
 
@@ -132,6 +141,11 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: R
 
   await query('DELETE FROM floors WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
   auditLog(req, { action: 'delete', resourceType: 'floor', resourceId: id });
+  await cacheInvalidate(
+    CacheKeys.floorList(tenantId),
+    CacheKeys.floor(id, tenantId),
+    CacheKeys.floorDesks(id, tenantId),
+  );
   res.status(204).send();
 });
 
@@ -212,7 +226,10 @@ router.get('/:id/rooms', requireAuth, async (req: AuthRequest, res: Response): P
 router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const tenantId = req.user!.tenantId;
-  const result = await query<{ id: string; name: string; building: string; floor_number: number; created_at: string }>(
+  const cacheKey = CacheKeys.floor(id, tenantId);
+  const cached = await cacheGet<FloorRow>(cacheKey);
+  if (cached) { res.json(cached); return; }
+  const result = await query<FloorRow>(
     'SELECT id, name, building, floor_number, created_at FROM floors WHERE id = $1 AND tenant_id = $2',
     [id, tenantId]
   );
@@ -220,6 +237,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise
     res.status(404).json({ error: 'Floor not found' });
     return;
   }
+  await cacheSet(cacheKey, result.rows[0]);
   res.json(result.rows[0]);
 });
 
@@ -265,13 +283,15 @@ router.get('/:id/desks', requireAuth, async (req: AuthRequest, res: Response): P
     );
     res.json(result.rows);
   } else {
-    const result = await query<{
-      id: string; floor_id: string; label: string; x_position: number; y_position: number;
-      status: string; created_at: string;
-    }>(
+    type DeskLayoutRow = { id: string; floor_id: string; label: string; x_position: number; y_position: number; status: string; created_at: string };
+    const deskCacheKey = CacheKeys.floorDesks(id, tenantId);
+    const cachedDesks = await cacheGet<DeskLayoutRow[]>(deskCacheKey);
+    if (cachedDesks) { res.json(cachedDesks); return; }
+    const result = await query<DeskLayoutRow>(
       'SELECT id, floor_id, label, x_position, y_position, status, created_at FROM desks WHERE floor_id = $1 AND tenant_id = $2 ORDER BY label',
       [id, tenantId]
     );
+    await cacheSet(deskCacheKey, result.rows);
     res.json(result.rows);
   }
 });
