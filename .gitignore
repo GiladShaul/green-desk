@@ -57,3 +57,7 @@ temp/
 
 # Embedded PostgreSQL data
 .pgdata/
+
+# Playwright test output
+playwright-report/
+test-results/

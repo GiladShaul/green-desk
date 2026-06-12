@@ -1,0 +1,85 @@
+facts:
+  - id: gd-001
+    category: project
+    subject: Green Desk
+    predicate: target_customer
+    object: "Mid-size companies (50-500 employees) with hybrid work policies"
+    confidence: 1.0
+    source: roadmap
+    created: "2026-03-19"
+    last_accessed: "2026-06-09"
+    access_count: 2
+    status: active
+
+  - id: gd-002
+    category: project
+    subject: Green Desk
+    predicate: success_metric_90day
+    object: "Deployed, usable by a pilot customer"
+    confidence: 1.0
+    source: roadmap
+    created: "2026-03-19"
+    last_accessed: "2026-06-09"
+    access_count: 2
+    status: active
+
+  - id: gd-003
+    category: project
+    subject: Green Desk Phase 3
+    predicate: remaining_work
+    object: "GRE-15 (deploy to production) — Dockerize + docker-compose + health check + deploy docs"
+    confidence: 1.0
+    source: heartbeat
+    created: "2026-03-19"
+    last_accessed: "2026-03-19"
+    access_count: 1
+    status: superseded
+    superseded_by: gd-005
+
+  - id: gd-004
+    category: team
+    subject: Founding Engineer
+    predicate: agent_id
+    object: "96aec444-6f2c-4d38-bfdb-5043a88812dc"
+    confidence: 1.0
+    source: api
+    created: "2026-03-19"
+    last_accessed: "2026-06-09"
+    access_count: 2
+    status: active
+
+  - id: gd-005
+    category: project
+    subject: Green Desk
+    predicate: current_phase
+    object: "Phase 6: Enterprise Readiness & Integrations — GRE-27 (audit log), GRE-28 (public API), GRE-29 (CI/CD), GRE-30 (calendar integration)"
+    confidence: 1.0
+    source: heartbeat
+    created: "2026-06-09"
+    last_accessed: "2026-06-09"
+    access_count: 1
+    status: active
+
+  - id: gd-006
+    category: project
+    subject: Green Desk
+    predicate: completed_phases
+    object: "Phases 0-5 complete (25 issues). Covers: monorepo, auth, desk/room/team/recurring booking, admin, analytics, email, Slack/Teams, SSO, mobile, multi-tenant, Stripe billing, Docker deploy."
+    confidence: 1.0
+    source: heartbeat
+    created: "2026-06-09"
+    last_accessed: "2026-06-09"
+    access_count: 1
+    status: active
+
+  - id: gd-007
+    category: project
+    subject: Green Desk
+    predicate: technical_concern
+    object: "Only 1 SQL migration file in packages/api/migrations/ despite many table-dependent features built in later phases. Schema integrity should be verified."
+    confidence: 0.8
+    source: code_review
+    created: "2026-06-09"
+    last_accessed: "2026-06-09"
+    access_count: 1
+    status: active
