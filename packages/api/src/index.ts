@@ -2,6 +2,8 @@ import { config } from 'dotenv';
 import path from 'path';
 config({ path: path.resolve(__dirname, '..', '..', '..', '.env') });
 
+import { initRedis, pingRedis } from './redis';
+
 import express, { Request, Response, NextFunction } from 'express';
 import pinoHttp from 'pino-http';
 import { logger } from './logger';
@@ -17,6 +19,7 @@ import roomBookingsRouter from './room-bookings/router';
 import teamBookingsRouter from './team-bookings/router';
 import ssoRouter from './sso/router';
 import { startReminderScheduler } from './services/reminder-scheduler';
+import { startNoShowScheduler } from './services/noshow-scheduler';
 import { handleStripeWebhook } from './billing/webhook';
 import billingRouter from './billing/router';
 import { purgeExpiredAuditLogs } from './services/audit';
@@ -63,7 +66,8 @@ app.get('/health', (_req, res) => {
 app.get('/ready', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'ready' });
+    const redisOk = await pingRedis();
+    res.json({ status: 'ready', redis: redisOk ? 'ok' : 'unavailable' });
   } catch {
     res.status(503).json({ status: 'not ready' });
   }
@@ -103,19 +107,22 @@ process.on('unhandledRejection', (reason) => {
 });
 
 if (require.main === module) {
-  app.listen(PORT, () => {
-    logger.info(`API server running on http://localhost:${PORT}`);
-    // Materialize recurring bookings on startup
-    generateRecurringBookings()
-      .then((n) => logger.info(`[recurring-bookings] generated ${n} booking(s) on startup`))
-      .catch((err: unknown) => logger.error({ err }, '[recurring-bookings] startup generate error'));
-    startReminderScheduler();
-    // Purge expired audit logs on startup, then every 24 hours
-    purgeExpiredAuditLogs().catch((err: unknown) => logger.error({ err }, '[audit] startup purge error'));
-    setInterval(() => {
-      purgeExpiredAuditLogs().catch((err: unknown) => logger.error({ err }, '[audit] purge error'));
-    }, 24 * 60 * 60 * 1000);
-  });
+  initRedis()
+    .catch((err: unknown) => logger.error({ err }, '[redis] init error'))
+    .finally(() => {
+      app.listen(PORT, () => {
+        logger.info(`API server running on http://localhost:${PORT}`);
+        generateRecurringBookings()
+          .then((n) => logger.info(`[recurring-bookings] generated ${n} booking(s) on startup`))
+          .catch((err: unknown) => logger.error({ err }, '[recurring-bookings] startup generate error'));
+        startReminderScheduler();
+    startNoShowScheduler();
+        purgeExpiredAuditLogs().catch((err: unknown) => logger.error({ err }, '[audit] startup purge error'));
+        setInterval(() => {
+          purgeExpiredAuditLogs().catch((err: unknown) => logger.error({ err }, '[audit] purge error'));
+        }, 24 * 60 * 60 * 1000);
+      });
+    });
 }
 
 export default app;

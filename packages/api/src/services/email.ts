@@ -127,3 +127,29 @@ export async function sendBookingCancellation(
 
   await send({ from: FROM, to: user.email, subject, text });
 }
+
+export async function sendNoShowNotification(
+  user: EmailUser,
+  booking: EmailBooking,
+  desk: EmailDesk,
+  floor: EmailFloor
+): Promise<void> {
+  const subject = `Your booking for Desk ${desk.label} was released`;
+  const text = [
+    `Hi ${user.name},`,
+    '',
+    `Your booking for Desk ${desk.label} was automatically released because check-in was not completed within the allowed window.`,
+    '',
+    `  Desk:       ${desk.label}`,
+    `  Floor:      ${floor.name}`,
+    `  Building:   ${floor.building}`,
+    `  Date:       ${booking.date}`,
+    `  Time:       ${booking.start_time} – ${booking.end_time}`,
+    '',
+    'The desk is now available for walk-in booking.',
+    '',
+    '– The Green Desk Team',
+  ].join('\n');
+
+  await send({ from: FROM, to: user.email, subject, text });
+}

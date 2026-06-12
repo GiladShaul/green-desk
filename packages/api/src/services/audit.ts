@@ -2,7 +2,7 @@ import { query } from '../db';
 import { AuthRequest } from '../auth/middleware';
 import { logger } from '../logger';
 
-export type AuditAction = 'create' | 'update' | 'delete' | 'login' | 'logout' | 'login_failed';
+export type AuditAction = 'create' | 'update' | 'delete' | 'login' | 'logout' | 'login_failed' | 'check_in';
 export type AuditResourceType =
   | 'booking'
   | 'desk'
@@ -15,7 +15,9 @@ export type AuditResourceType =
   | 'billing'
   | 'room_booking'
   | 'recurring_booking'
-  | 'tenant';
+  | 'tenant'
+  | 'checkin_settings'
+  | 'api_key';
 
 interface AuditParams {
   tenantId: string;

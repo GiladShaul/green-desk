@@ -741,4 +741,122 @@ router.get('/audit-logs', requireAuth, requireAdmin, async (req: AuthRequest, re
   res.json({ logs: logsResult.rows, total, page, pageSize });
 });
 
+// ── Check-in Settings ─────────────────────────────────────────────────────
+
+// GET /api/admin/checkin-settings
+router.get('/checkin-settings', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const tenantId = req.user!.tenantId;
+  const result = await query<{ tenant_id: string; checkin_enabled: boolean; checkin_window_minutes: number }>(
+    `SELECT tenant_id, checkin_enabled, checkin_window_minutes
+     FROM tenant_checkin_settings WHERE tenant_id = $1`,
+    [tenantId],
+  );
+  if (result.rows.length === 0) {
+    res.json({ tenant_id: tenantId, checkin_enabled: true, checkin_window_minutes: 15 });
+    return;
+  }
+  res.json(result.rows[0]);
+});
+
+// PUT /api/admin/checkin-settings
+router.put('/checkin-settings', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const tenantId = req.user!.tenantId;
+  const { checkin_enabled, checkin_window_minutes } = req.body as Record<string, unknown>;
+
+  if (checkin_enabled !== undefined && typeof checkin_enabled !== 'boolean') {
+    res.status(400).json({ error: 'checkin_enabled must be a boolean' });
+    return;
+  }
+  if (checkin_window_minutes !== undefined) {
+    if (typeof checkin_window_minutes !== 'number' || checkin_window_minutes < 1 || checkin_window_minutes > 120) {
+      res.status(400).json({ error: 'checkin_window_minutes must be a number between 1 and 120' });
+      return;
+    }
+  }
+
+  const result = await query<{ tenant_id: string; checkin_enabled: boolean; checkin_window_minutes: number }>(
+    `INSERT INTO tenant_checkin_settings (tenant_id, checkin_enabled, checkin_window_minutes)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (tenant_id) DO UPDATE
+       SET checkin_enabled = EXCLUDED.checkin_enabled,
+           checkin_window_minutes = EXCLUDED.checkin_window_minutes,
+           updated_at = now()
+     RETURNING tenant_id, checkin_enabled, checkin_window_minutes`,
+    [tenantId, checkin_enabled ?? true, checkin_window_minutes ?? 15],
+  );
+  auditLog(req, { action: 'update', resourceType: 'checkin_settings', resourceId: tenantId });
+  res.json(result.rows[0]);
+});
+
+// GET /api/admin/no-show-report?from=YYYY-MM-DD&to=YYYY-MM-DD&floorId=X&userId=X
+router.get('/no-show-report', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const tenantId = req.user!.tenantId;
+  const { from, to, floorId, userId } = req.query as Record<string, string>;
+
+  const conditions: string[] = ['b.tenant_id = $1', "b.status = 'no_show'"];
+  const params: unknown[] = [tenantId];
+
+  if (from) {
+    params.push(from);
+    conditions.push(`b.date >= $${params.length}::date`);
+  }
+  if (to) {
+    params.push(to);
+    conditions.push(`b.date <= $${params.length}::date`);
+  }
+  if (floorId) {
+    params.push(floorId);
+    conditions.push(`d.floor_id = $${params.length}`);
+  }
+  if (userId) {
+    params.push(userId);
+    conditions.push(`b.user_id = $${params.length}`);
+  }
+
+  const where = conditions.join(' AND ');
+
+  const [bookingsResult, summaryResult] = await Promise.all([
+    query<{
+      id: string; date: string; start_time: string; end_time: string;
+      desk_label: string; floor_name: string; building: string;
+      user_id: string; user_name: string; user_email: string;
+      no_show_released_at: string;
+    }>(
+      `SELECT b.id, b.date::text, b.start_time::text, b.end_time::text,
+              d.label AS desk_label, f.name AS floor_name, f.building,
+              u.id AS user_id, u.name AS user_name, u.email AS user_email,
+              b.no_show_released_at
+       FROM bookings b
+       JOIN desks d ON d.id = b.desk_id
+       JOIN floors f ON f.id = d.floor_id
+       JOIN users u ON u.id = b.user_id
+       WHERE ${where}
+       ORDER BY b.date DESC, b.start_time DESC
+       LIMIT 500`,
+      params,
+    ),
+    query<{ user_id: string; user_name: string; user_email: string; no_show_count: string }>(
+      `SELECT u.id AS user_id, u.name AS user_name, u.email AS user_email,
+              COUNT(b.id)::text AS no_show_count
+       FROM bookings b
+       JOIN users u ON u.id = b.user_id
+       WHERE ${where}
+       GROUP BY u.id, u.name, u.email
+       ORDER BY no_show_count DESC`,
+      params,
+    ),
+  ]);
+
+  res.json({
+    total: bookingsResult.rows.length,
+    bookings: bookingsResult.rows,
+    byUser: summaryResult.rows.map(r => ({
+      userId: r.user_id,
+      userName: r.user_name,
+      userEmail: r.user_email,
+      noShowCount: parseInt(r.no_show_count, 10),
+    })),
+  });
+});
+
 export default router;

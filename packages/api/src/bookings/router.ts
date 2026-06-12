@@ -5,6 +5,7 @@ import { sendBookingConfirmation, sendBookingCancellation } from '../services/em
 import { notifyBookingEvent } from '../services/webhook';
 import { auditLog } from '../services/audit';
 import { syncBookingCreated, syncBookingCancelled } from '../services/calendar';
+import { generateCheckInToken, validateCheckInToken } from '../services/checkin';
 import { logger } from '../logger';
 
 const router = Router();
@@ -61,7 +62,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
     return;
   }
 
-  const result = await query<{
+  const insertResult = await query<{
     id: string; desk_id: string; user_id: string; date: string;
     start_time: string; end_time: string; status: string; created_at: string;
   }>(
@@ -70,9 +71,13 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response): Promise<v
      RETURNING id, desk_id, user_id, date, start_time, end_time, status, created_at`,
     [desk_id, userId, date, start_time, end_time, tenantId]
   );
-  const booking = result.rows[0];
+  const booking = insertResult.rows[0];
+
+  // Generate and store HMAC check-in token now that we have the booking ID
+  const checkInToken = generateCheckInToken(booking.id);
+  await query('UPDATE bookings SET check_in_token = $1 WHERE id = $2', [checkInToken, booking.id]);
   auditLog(req, { action: 'create', resourceType: 'booking', resourceId: booking.id });
-  res.status(201).json(booking);
+  res.status(201).json({ ...booking, check_in_token: checkInToken });
 
   // Fire confirmation email non-blocking — do not await, never fail the booking
   query<{ id: string; email: string; name: string }>(
@@ -115,10 +120,12 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
   const result = await query<{
     id: string; desk_id: string; user_id: string; date: string;
     start_time: string; end_time: string; status: string; created_at: string;
-    desk_label: string; floor_id: string; floor_name: string;
+    desk_label: string; floor_id: string; floor_name: string; check_in_token: string | null;
+    checked_in_at: string | null;
   }>(
     `SELECT b.id, b.desk_id, b.user_id, b.date, b.start_time, b.end_time, b.status, b.created_at,
-            d.label AS desk_label, d.floor_id, f.name AS floor_name
+            d.label AS desk_label, d.floor_id, f.name AS floor_name,
+            b.check_in_token, b.checked_in_at
      FROM bookings b
      JOIN desks d ON d.id = b.desk_id
      JOIN floors f ON f.id = d.floor_id
@@ -236,6 +243,57 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Prom
 
   // Sync cancellation to calendar non-blocking
   syncBookingCancelled(id).catch((err: unknown) => logger.error({ err }, '[calendar] sync cancel error'));
+});
+
+// POST /api/bookings/:id/check-in — validate QR token and mark booking as checked in
+router.post('/:id/check-in', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { token } = req.body as Record<string, unknown>;
+  const tenantId = req.user!.tenantId;
+
+  if (typeof token !== 'string' || !token) {
+    res.status(400).json({ error: 'token is required' });
+    return;
+  }
+
+  const validatedId = validateCheckInToken(token);
+  if (!validatedId || validatedId !== id) {
+    res.status(400).json({ error: 'Invalid check-in token' });
+    return;
+  }
+
+  const existing = await query<{
+    id: string; status: string; date: string; start_time: string; end_time: string;
+    desk_id: string; user_id: string;
+  }>(
+    'SELECT id, status, date, start_time, end_time, desk_id, user_id FROM bookings WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId]
+  );
+
+  if (existing.rows.length === 0) {
+    res.status(404).json({ error: 'Booking not found' });
+    return;
+  }
+
+  const booking = existing.rows[0];
+
+  if (booking.status === 'checked_in') {
+    res.json({ message: 'Already checked in', booking });
+    return;
+  }
+
+  if (!['confirmed'].includes(booking.status)) {
+    res.status(409).json({ error: `Cannot check in: booking status is ${booking.status}` });
+    return;
+  }
+
+  await query(
+    'UPDATE bookings SET status = $1, checked_in_at = now() WHERE id = $2 AND tenant_id = $3',
+    ['checked_in', id, tenantId]
+  );
+
+  auditLog(req, { action: 'check_in', resourceType: 'booking', resourceId: id });
+  res.json({ message: 'Checked in successfully', bookingId: id });
 });
 
 export default router;
