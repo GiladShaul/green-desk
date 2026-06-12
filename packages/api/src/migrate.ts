@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import fs from 'fs';
 import path from 'path';
+import { logger } from './logger';
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 
@@ -27,11 +28,11 @@ export async function runMigrations(): Promise<void> {
         [file]
       );
       if (rows.length > 0) {
-        console.log(`[migrate] Skipping ${file} (already applied)`);
+        logger.debug(`[migrate] Skipping ${file} (already applied)`);
         continue;
       }
 
-      console.log(`[migrate] Applying ${file}...`);
+      logger.info(`[migrate] Applying ${file}...`);
       const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
 
       await client.query('BEGIN');
@@ -39,14 +40,14 @@ export async function runMigrations(): Promise<void> {
         await client.query(sql);
         await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
         await client.query('COMMIT');
-        console.log(`[migrate] Applied ${file}`);
+        logger.info(`[migrate] Applied ${file}`);
       } catch (err) {
         await client.query('ROLLBACK');
         throw err;
       }
     }
 
-    console.log('[migrate] All migrations complete');
+    logger.info('[migrate] All migrations complete');
   } finally {
     client.release();
     await pool.end();
@@ -55,7 +56,7 @@ export async function runMigrations(): Promise<void> {
 
 if (require.main === module) {
   runMigrations().catch((err) => {
-    console.error('[migrate] Error:', err);
+    logger.error({ err }, '[migrate] Error');
     process.exit(1);
   });
 }
