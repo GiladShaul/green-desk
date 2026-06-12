@@ -5,10 +5,12 @@
 import { Router, Response } from 'express';
 import { query } from '../db';
 import { requireApiKey, requireScope, ApiKeyRequest } from '../api-keys/middleware';
+import { v1RateLimit } from './rate-limit';
 
 const router = Router();
 
 router.use(requireApiKey);
+router.use(v1RateLimit);
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;

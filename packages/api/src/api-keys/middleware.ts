@@ -3,31 +3,6 @@ import crypto from 'crypto';
 import { query } from '../db';
 import { AuthPayload, AuthRequest } from '../auth/middleware';
 
-// In-memory rate limiter: keyId → { count, resetAt }
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = parseInt(process.env.API_KEY_RATE_LIMIT ?? '100', 10);
-const RATE_WINDOW_MS = 60_000;
-
-function checkRateLimit(keyId: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitStore.get(keyId);
-  if (!entry || now >= entry.resetAt) {
-    rateLimitStore.set(keyId, { count: 1, resetAt: now + RATE_WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= RATE_LIMIT) return false;
-  entry.count++;
-  return true;
-}
-
-// Purge expired rate limit entries every 5 minutes to prevent unbounded memory growth
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, entry] of rateLimitStore) {
-    if (now >= entry.resetAt) rateLimitStore.delete(id);
-  }
-}, 5 * 60_000);
-
 export interface ApiKeyPayload extends AuthPayload {
   scopes: string[];
   keyId: string;
@@ -86,11 +61,6 @@ export async function requireApiKey(req: ApiKeyRequest, res: Response, next: Nex
   const hash = hashKey(rawKey);
   if (hash !== apiKey.key_hash) {
     res.status(401).json({ error: 'Invalid API key', code: 'INVALID_API_KEY' });
-    return;
-  }
-
-  if (!checkRateLimit(apiKey.id)) {
-    res.status(429).json({ error: 'Rate limit exceeded (100 req/min)', code: 'RATE_LIMIT_EXCEEDED' });
     return;
   }
 
