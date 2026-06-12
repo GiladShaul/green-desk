@@ -14,7 +14,8 @@ export type AuditResourceType =
   | 'integration'
   | 'billing'
   | 'room_booking'
-  | 'recurring_booking';
+  | 'recurring_booking'
+  | 'tenant';
 
 interface AuditParams {
   tenantId: string;

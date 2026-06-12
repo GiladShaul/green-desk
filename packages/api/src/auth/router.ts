@@ -77,7 +77,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
   res.status(201).json({
     token,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenant_id, tenantName: tenant.name },
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenant_id, tenantName: tenant.name, onboardingCompleted: false },
   });
 });
 
@@ -93,8 +93,10 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   const result = await query<{
     id: string; email: string; name: string; role: string;
     password_hash: string | null; tenant_id: string; tenant_name: string;
+    status: string; onboarding_completed: boolean;
   }>(
-    `SELECT u.id, u.email, u.name, u.role, u.password_hash, u.tenant_id, t.name AS tenant_name
+    `SELECT u.id, u.email, u.name, u.role, u.password_hash, u.tenant_id, t.name AS tenant_name,
+            u.status, t.onboarding_completed
      FROM users u JOIN tenants t ON t.id = u.tenant_id
      WHERE u.email = $1`,
     [email]
@@ -106,6 +108,11 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
   if (!user) {
     res.status(401).json({ error: 'Invalid credentials' });
+    return;
+  }
+
+  if (user.status === 'deactivated') {
+    res.status(403).json({ error: 'Your account has been deactivated. Contact your administrator.' });
     return;
   }
 
@@ -143,7 +150,101 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   const token = signToken(user.id, user.role, user.tenant_id);
   res.status(200).json({
     token,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenant_id, tenantName: user.tenant_name },
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenant_id, tenantName: user.tenant_name, onboardingCompleted: user.onboarding_completed },
+  });
+});
+
+// GET /api/auth/invite/:token — validate an invitation token
+router.get('/invite/:token', async (req: Request, res: Response): Promise<void> => {
+  const { token } = req.params;
+  const result = await query<{
+    id: string; email: string; role: string; expires_at: string; used_at: string | null; tenant_name: string;
+  }>(
+    `SELECT i.id, i.email, i.role, i.expires_at, i.used_at, t.name AS tenant_name
+     FROM user_invitations i JOIN tenants t ON t.id = i.tenant_id
+     WHERE i.token = $1`,
+    [token]
+  );
+  const inv = result.rows[0];
+  if (!inv) {
+    res.status(404).json({ error: 'Invitation not found' });
+    return;
+  }
+  if (inv.used_at) {
+    res.status(410).json({ error: 'Invitation has already been used' });
+    return;
+  }
+  if (new Date(inv.expires_at) < new Date()) {
+    res.status(410).json({ error: 'Invitation has expired' });
+    return;
+  }
+  res.json({ id: inv.id, email: inv.email, role: inv.role, tenantName: inv.tenant_name });
+});
+
+// POST /api/auth/accept-invite — complete registration via invitation
+router.post('/accept-invite', async (req: Request, res: Response): Promise<void> => {
+  const { token, name, password } = req.body as Record<string, unknown>;
+
+  if (typeof token !== 'string' || !token) {
+    res.status(400).json({ error: 'token is required' });
+    return;
+  }
+  if (typeof name !== 'string' || !name.trim()) {
+    res.status(400).json({ error: 'name is required' });
+    return;
+  }
+  if (typeof password !== 'string' || password.length < 8) {
+    res.status(400).json({ error: 'Password must be at least 8 characters' });
+    return;
+  }
+
+  const invResult = await query<{
+    id: string; email: string; role: string; tenant_id: string; expires_at: string; used_at: string | null;
+  }>(
+    'SELECT id, email, role, tenant_id, expires_at, used_at FROM user_invitations WHERE token = $1',
+    [token]
+  );
+  const inv = invResult.rows[0];
+  if (!inv) {
+    res.status(404).json({ error: 'Invitation not found' });
+    return;
+  }
+  if (inv.used_at) {
+    res.status(410).json({ error: 'Invitation has already been used' });
+    return;
+  }
+  if (new Date(inv.expires_at) < new Date()) {
+    res.status(410).json({ error: 'Invitation has expired' });
+    return;
+  }
+
+  const existingUser = await query<{ id: string }>(
+    'SELECT id FROM users WHERE email = $1 AND tenant_id = $2',
+    [inv.email, inv.tenant_id]
+  );
+  if (existingUser.rows.length > 0) {
+    res.status(409).json({ error: 'An account with this email already exists in this organization' });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password as string, 10);
+  const userResult = await query<{ id: string; email: string; name: string; role: string; tenant_id: string }>(
+    `INSERT INTO users (email, password_hash, name, role, tenant_id)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, email, name, role, tenant_id`,
+    [inv.email, passwordHash, (name as string).trim(), inv.role, inv.tenant_id]
+  );
+  const user = userResult.rows[0];
+
+  await query('UPDATE user_invitations SET used_at = now() WHERE id = $1', [inv.id]);
+
+  const tenantResult = await query<{ name: string }>('SELECT name FROM tenants WHERE id = $1', [inv.tenant_id]);
+  const tenantName = tenantResult.rows[0]?.name ?? '';
+  const jwtToken = signToken(user.id, user.role, user.tenant_id);
+
+  res.status(201).json({
+    token: jwtToken,
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenant_id, tenantName },
   });
 });
 
@@ -151,8 +252,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.sub;
 
-  const result = await query<{ id: string; email: string; name: string; role: string; tenant_id: string; tenant_name: string }>(
-    `SELECT u.id, u.email, u.name, u.role, u.tenant_id, t.name AS tenant_name
+  const result = await query<{ id: string; email: string; name: string; role: string; tenant_id: string; tenant_name: string; onboarding_completed: boolean }>(
+    `SELECT u.id, u.email, u.name, u.role, u.tenant_id, t.name AS tenant_name, t.onboarding_completed
      FROM users u JOIN tenants t ON t.id = u.tenant_id
      WHERE u.id = $1`,
     [userId]
@@ -171,6 +272,7 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<
     role: user.role,
     tenantId: user.tenant_id,
     tenantName: user.tenant_name,
+    onboardingCompleted: user.onboarding_completed,
   });
 });
 

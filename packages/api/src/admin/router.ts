@@ -1,8 +1,10 @@
 import { Router, Response, NextFunction } from 'express';
+import { randomBytes } from 'crypto';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { getTenantPlanLimits } from '../billing/plans';
 import { auditLog } from '../services/audit';
+import { logger } from '../logger';
 
 const router = Router();
 
@@ -14,24 +16,47 @@ function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void
   next();
 }
 
-// GET /api/admin/users — list all users in tenant (admin only)
+// GET /api/admin/users — list all users in tenant, with optional search/filter
 router.get('/users', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   const tenantId = req.user!.tenantId;
-  const result = await query<{ id: string; email: string; name: string; role: string; created_at: string }>(
-    'SELECT id, email, name, role, created_at FROM users WHERE tenant_id = $1 ORDER BY created_at DESC',
-    [tenantId]
+  const { search, role, status } = req.query as Record<string, string | undefined>;
+
+  const conditions: string[] = ['tenant_id = $1'];
+  const params: unknown[] = [tenantId];
+
+  if (search) {
+    params.push(`%${search}%`);
+    conditions.push(`(name ILIKE $${params.length} OR email ILIKE $${params.length})`);
+  }
+  if (role) {
+    params.push(role);
+    conditions.push(`role = $${params.length}`);
+  }
+  if (status) {
+    params.push(status);
+    conditions.push(`status = $${params.length}`);
+  }
+
+  const result = await query<{ id: string; email: string; name: string; role: string; status: string; created_at: string }>(
+    `SELECT id, email, name, role, status, created_at FROM users WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`,
+    params
   );
   res.json(result.rows);
 });
 
-// PATCH /api/admin/users/:id — update user role (admin only)
+// PATCH /api/admin/users/:id — update role and/or status (admin only)
 router.patch('/users/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
-  const { role } = req.body as Record<string, unknown>;
+  const { role, status } = req.body as Record<string, unknown>;
   const tenantId = req.user!.tenantId;
+  const actingUserId = req.user!.sub;
 
-  if (role !== 'admin' && role !== 'member') {
-    res.status(400).json({ error: 'role must be "admin" or "member"' });
+  if (role !== undefined && role !== 'admin' && role !== 'member' && role !== 'viewer') {
+    res.status(400).json({ error: 'role must be "admin", "member", or "viewer"' });
+    return;
+  }
+  if (status !== undefined && status !== 'active' && status !== 'deactivated') {
+    res.status(400).json({ error: 'status must be "active" or "deactivated"' });
     return;
   }
 
@@ -41,11 +66,39 @@ router.patch('/users/:id', requireAuth, requireAdmin, async (req: AuthRequest, r
     return;
   }
 
-  const result = await query<{ id: string; email: string; name: string; role: string; created_at: string }>(
-    'UPDATE users SET role = $1 WHERE id = $2 AND tenant_id = $3 RETURNING id, email, name, role, created_at',
-    [role, id, tenantId]
+  if (id === actingUserId && status === 'deactivated') {
+    res.status(400).json({ error: 'You cannot deactivate your own account' });
+    return;
+  }
+
+  const updates: string[] = [];
+  const params: unknown[] = [];
+  const changes: Record<string, unknown> = {};
+
+  if (role !== undefined) {
+    params.push(role);
+    updates.push(`role = $${params.length}`);
+    changes.role = { new: role };
+  }
+  if (status !== undefined) {
+    params.push(status);
+    updates.push(`status = $${params.length}`);
+    changes.status = { new: status };
+  }
+
+  if (updates.length === 0) {
+    res.status(400).json({ error: 'No updatable fields provided' });
+    return;
+  }
+
+  params.push(id);
+  params.push(tenantId);
+  const result = await query<{ id: string; email: string; name: string; role: string; status: string; created_at: string }>(
+    `UPDATE users SET ${updates.join(', ')} WHERE id = $${params.length - 1} AND tenant_id = $${params.length}
+     RETURNING id, email, name, role, status, created_at`,
+    params
   );
-  auditLog(req, { action: 'update', resourceType: 'user', resourceId: id, changes: { role: { new: role } } });
+  auditLog(req, { action: 'update', resourceType: 'user', resourceId: id, changes });
   res.json(result.rows[0]);
 });
 
@@ -453,59 +506,173 @@ router.delete('/integrations/:id', requireAuth, requireAdmin, async (req: AuthRe
   res.status(204).end();
 });
 
-// POST /api/admin/users — invite/create a member (admin only)
-router.post('/users', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
-  const { name, email, password } = req.body as Record<string, unknown>;
+// POST /api/admin/users/invite — create an invitation link (admin only)
+router.post('/users/invite', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { email, role } = req.body as Record<string, unknown>;
   const tenantId = req.user!.tenantId;
+  const invitedBy = req.user!.sub;
 
-  if (typeof name !== 'string' || !name.trim()) {
-    res.status(400).json({ error: 'name is required' });
-    return;
-  }
   if (typeof email !== 'string' || !email.trim()) {
     res.status(400).json({ error: 'email is required' });
     return;
   }
-  if (typeof password !== 'string' || password.length < 8) {
-    res.status(400).json({ error: 'password must be at least 8 characters' });
-    return;
-  }
+  const normalizedEmail = email.trim().toLowerCase();
+  const inviteRole = (role === 'admin' || role === 'member' || role === 'viewer') ? role : 'member';
 
   // Check seat limit
   const { seatsLimit } = await getTenantPlanLimits(tenantId);
   if (seatsLimit !== null) {
     const countResult = await query<{ count: string }>(
-      'SELECT COUNT(*) AS count FROM users WHERE tenant_id = $1',
-      [tenantId]
+      'SELECT COUNT(*) AS count FROM users WHERE tenant_id = $1 AND status = $2',
+      [tenantId, 'active']
     );
     if (parseInt(countResult.rows[0].count, 10) >= seatsLimit) {
       res.status(402).json({
-        error: `Seat limit reached for your plan. Upgrade to add more users.`,
+        error: 'Seat limit reached for your plan. Upgrade to add more users.',
         upgradeUrl: '/api/billing/checkout',
       });
       return;
     }
   }
 
-  // Check email uniqueness within tenant
-  const existing = await query<{ id: string }>(
+  // Don't re-invite someone already in this tenant
+  const existingUser = await query<{ id: string }>(
     'SELECT id FROM users WHERE email = $1 AND tenant_id = $2',
-    [email.trim().toLowerCase(), tenantId]
+    [normalizedEmail, tenantId]
   );
-  if (existing.rows.length > 0) {
-    res.status(409).json({ error: 'A user with that email already exists' });
+  if (existingUser.rows.length > 0) {
+    res.status(409).json({ error: 'A user with that email already exists in this organization' });
     return;
   }
 
-  const bcrypt = await import('bcryptjs');
-  const passwordHash = await bcrypt.hash(password, 10);
-
-  const result = await query<{ id: string; email: string; name: string; role: string; created_at: string }>(
-    'INSERT INTO users (email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, role, created_at',
-    [email.trim().toLowerCase(), passwordHash, name.trim(), 'member', tenantId]
+  // Expire any outstanding invite for the same email in this tenant
+  await query(
+    `UPDATE user_invitations SET used_at = now() WHERE tenant_id = $1 AND email = $2 AND used_at IS NULL`,
+    [tenantId, normalizedEmail]
   );
-  auditLog(req, { action: 'create', resourceType: 'user', resourceId: result.rows[0].id });
-  res.status(201).json(result.rows[0]);
+
+  const token = randomBytes(32).toString('hex');
+  const result = await query<{ id: string; email: string; role: string; token: string; expires_at: string }>(
+    `INSERT INTO user_invitations (tenant_id, email, role, token, invited_by)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, email, role, token, expires_at`,
+    [tenantId, normalizedEmail, inviteRole, token, invitedBy]
+  );
+
+  const invitation = result.rows[0];
+  const inviteUrl = `${process.env.APP_URL ?? 'http://localhost:5173'}/accept-invite?token=${invitation.token}`;
+  logger.info({ email: normalizedEmail, inviteUrl }, '[invite] Invitation created');
+
+  auditLog(req, { action: 'create', resourceType: 'user', resourceId: invitation.id, changes: { email: normalizedEmail, role: inviteRole } });
+  res.status(201).json({ ...invitation, inviteUrl });
+});
+
+// POST /api/admin/users/bulk-invite — invite multiple users from CSV body (admin only)
+// Body: { rows: Array<{ email: string; role?: string }> }
+router.post('/users/bulk-invite', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { rows } = req.body as { rows?: unknown };
+  const tenantId = req.user!.tenantId;
+  const invitedBy = req.user!.sub;
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    res.status(400).json({ error: 'rows must be a non-empty array' });
+    return;
+  }
+  if (rows.length > 200) {
+    res.status(400).json({ error: 'Maximum 200 invitations per batch' });
+    return;
+  }
+
+  const { seatsLimit } = await getTenantPlanLimits(tenantId);
+  const activeCount = seatsLimit !== null
+    ? parseInt((await query<{ count: string }>('SELECT COUNT(*) AS count FROM users WHERE tenant_id = $1 AND status = $2', [tenantId, 'active'])).rows[0].count, 10)
+    : 0;
+
+  const results: Array<{ email: string; status: 'invited' | 'skipped'; reason?: string; inviteUrl?: string }> = [];
+
+  for (const row of rows as Record<string, unknown>[]) {
+    const email = typeof row.email === 'string' ? row.email.trim().toLowerCase() : null;
+    if (!email) {
+      results.push({ email: String(row.email ?? ''), status: 'skipped', reason: 'Invalid email' });
+      continue;
+    }
+
+    const inviteRole = row.role === 'admin' || row.role === 'member' || row.role === 'viewer' ? row.role : 'member';
+
+    if (seatsLimit !== null && activeCount + results.filter(r => r.status === 'invited').length >= seatsLimit) {
+      results.push({ email, status: 'skipped', reason: 'Seat limit reached' });
+      continue;
+    }
+
+    const existingUser = await query<{ id: string }>('SELECT id FROM users WHERE email = $1 AND tenant_id = $2', [email, tenantId]);
+    if (existingUser.rows.length > 0) {
+      results.push({ email, status: 'skipped', reason: 'Already a member' });
+      continue;
+    }
+
+    await query(`UPDATE user_invitations SET used_at = now() WHERE tenant_id = $1 AND email = $2 AND used_at IS NULL`, [tenantId, email]);
+    const token = randomBytes(32).toString('hex');
+    await query(
+      `INSERT INTO user_invitations (tenant_id, email, role, token, invited_by) VALUES ($1, $2, $3, $4, $5)`,
+      [tenantId, email, inviteRole, token, invitedBy]
+    );
+    const inviteUrl = `${process.env.APP_URL ?? 'http://localhost:5173'}/accept-invite?token=${token}`;
+    results.push({ email, status: 'invited', inviteUrl });
+  }
+
+  res.status(207).json({ results });
+});
+
+// ── Tenant Settings ────────────────────────────────────────────────────────
+
+// GET /api/admin/tenant — get tenant settings
+router.get('/tenant', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const tenantId = req.user!.tenantId;
+  const result = await query<{ id: string; name: string; plan: string; timezone: string; booking_rules: Record<string, unknown>; onboarding_completed: boolean }>(
+    'SELECT id, name, plan, timezone, booking_rules, onboarding_completed FROM tenants WHERE id = $1',
+    [tenantId]
+  );
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'Tenant not found' });
+    return;
+  }
+  res.json(result.rows[0]);
+});
+
+// PATCH /api/admin/tenant — update tenant settings
+router.patch('/tenant', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const tenantId = req.user!.tenantId;
+  const { timezone, booking_rules, onboarding_completed } = req.body as Record<string, unknown>;
+
+  const updates: string[] = [];
+  const params: unknown[] = [];
+
+  if (typeof timezone === 'string') {
+    params.push(timezone);
+    updates.push(`timezone = $${params.length}`);
+  }
+  if (booking_rules !== undefined && typeof booking_rules === 'object') {
+    params.push(JSON.stringify(booking_rules));
+    updates.push(`booking_rules = $${params.length}`);
+  }
+  if (typeof onboarding_completed === 'boolean') {
+    params.push(onboarding_completed);
+    updates.push(`onboarding_completed = $${params.length}`);
+  }
+
+  if (updates.length === 0) {
+    res.status(400).json({ error: 'No updatable fields provided' });
+    return;
+  }
+
+  params.push(tenantId);
+  const result = await query<{ id: string; name: string; plan: string; timezone: string; booking_rules: Record<string, unknown>; onboarding_completed: boolean }>(
+    `UPDATE tenants SET ${updates.join(', ')} WHERE id = $${params.length}
+     RETURNING id, name, plan, timezone, booking_rules, onboarding_completed`,
+    params
+  );
+  auditLog(req, { action: 'update', resourceType: 'tenant', resourceId: tenantId });
+  res.json(result.rows[0]);
 });
 
 // ── Audit Logs ─────────────────────────────────────────────────────────────

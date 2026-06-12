@@ -6,6 +6,8 @@ import { Layout } from './components/Layout';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { AcceptInvite } from './pages/AcceptInvite';
+import { Onboarding } from './pages/Onboarding';
 import { Dashboard } from './pages/Dashboard';
 import { FloorView } from './pages/FloorView';
 import { MyBookings } from './pages/MyBookings';
@@ -30,8 +32,10 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/sso-callback" element={<SsoCallback />} />
           <Route element={<ProtectedRoute />}>
+            <Route path="/onboarding" element={<Onboarding />} />
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/floors/:id" element={<FloorView />} />

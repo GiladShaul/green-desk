@@ -30,6 +30,10 @@ export const api = {
   get<T>(path: string): Promise<T> {
     return request<T>(path, { method: 'GET' });
   },
+  getWithParams<T>(path: string, params: Record<string, string>): Promise<T> {
+    const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v !== ''))).toString();
+    return request<T>(qs ? `${path}?${qs}` : path, { method: 'GET' });
+  },
   patch<T>(path: string, body: unknown): Promise<T> {
     return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
   },

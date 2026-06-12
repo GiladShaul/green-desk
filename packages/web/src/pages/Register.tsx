@@ -19,7 +19,7 @@ export function Register() {
     setLoading(true);
     try {
       await register(name, email, password, orgName || undefined);
-      navigate('/dashboard');
+      navigate('/onboarding');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {

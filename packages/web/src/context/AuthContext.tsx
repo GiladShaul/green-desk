@@ -8,6 +8,7 @@ export interface User {
   role: string;
   tenantId: string;
   tenantName: string;
+  onboardingCompleted?: boolean;
 }
 
 interface AuthResponse {
@@ -20,6 +21,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, orgName?: string) => Promise<void>;
+  acceptInvite: (token: string, name: string, password: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -54,6 +56,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
   }
 
+  async function acceptInvite(token: string, name: string, password: string) {
+    const { token: jwt, user: u } = await api.post<AuthResponse>('/auth/accept-invite', { token, name, password });
+    localStorage.setItem('token', jwt);
+    setUser(u);
+  }
+
   function logout() {
     localStorage.removeItem('token');
     setUser(null);
@@ -65,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, acceptInvite, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
