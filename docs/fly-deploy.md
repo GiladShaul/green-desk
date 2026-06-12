@@ -63,6 +63,29 @@ If you prefer serverless Postgres:
 
 ---
 
+## 2b. Provision Redis (optional, recommended for production)
+
+Redis is used for rate-limit state sharing across multiple API instances and for caching hot reads (floor lists, desk layouts, tenant plan limits). The API degrades gracefully without it — all features work, just without shared rate-limiting or caching.
+
+```bash
+# Create an Upstash Redis instance on Fly.io
+flyctl redis create --name green-desk-redis --region iad
+
+# Get the private URL and set it as a secret
+flyctl secrets set REDIS_URL="$(flyctl redis status green-desk-redis --json | python -c 'import sys,json; print(json.load(sys.stdin)["privateUrl"])')" --app green-desk-api
+```
+
+> Upstash Redis is billed per request — no idle cost. The private URL keeps traffic on Fly's internal network.
+
+After deployment, the `/ready` endpoint reports Redis status:
+```bash
+curl https://green-desk-api.fly.dev/ready
+# With Redis:    {"status":"ready","redis":"ok"}
+# Without Redis: {"status":"ready","redis":"unavailable"}
+```
+
+---
+
 ## 3. Set secrets
 
 Secrets are encrypted at rest and injected as environment variables. **Never commit secrets to source control.**
@@ -277,5 +300,6 @@ flyctl machines restart --app green-desk-api
 | `SMTP_PASS` | API | no | SMTP password |
 | `EMAIL_FROM` | API | no | Sender address |
 | `CORS_ORIGIN` | API | no | Allowed CORS origin |
+| `REDIS_URL` | API | no | Upstash Redis private URL — enables Redis rate-limiting and caching |
 | `API_HOST` | Web | auto | Set in `fly.web.toml` — points nginx to API via private network |
 | `FLY_API_TOKEN` | GitHub | **yes** | GitHub Actions deploy token |
