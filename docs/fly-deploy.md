@@ -41,7 +41,19 @@ If you want different app names, update the `app` field in both `fly.*.toml` fil
 
 ## 2. Provision the database
 
-### Option A: Fly Postgres (recommended)
+### Option A: Supabase (already provisioned ✓)
+
+The production database is already provisioned on Supabase. All 15 migrations have been applied (20 tables). Skip to Step 3 and set `DATABASE_URL` to the Supabase connection string:
+
+```bash
+flyctl secrets set \
+  DATABASE_URL="postgresql://greendesk_api:<password>@db.nvsoearcfbezwzreqjov.supabase.co:5432/postgres?sslmode=require" \
+  --app green-desk-api
+```
+
+> Replace `<password>` with the `greendesk_api` role password. Get it from the Supabase project settings → Database → Connection string.
+
+### Option B: Fly Postgres
 
 ```bash
 # Create a Fly Postgres cluster (single node for staging, HA for production)
@@ -53,7 +65,7 @@ flyctl postgres attach green-desk-db --app green-desk-api
 
 > The `attach` command sets `DATABASE_URL` as a Fly secret on `green-desk-api` automatically.
 
-### Option B: Neon (serverless Postgres)
+### Option C: Neon (serverless Postgres)
 
 If you prefer serverless Postgres:
 
@@ -303,3 +315,33 @@ flyctl machines restart --app green-desk-api
 | `REDIS_URL` | API | no | Upstash Redis private URL — enables Redis rate-limiting and caching |
 | `API_HOST` | Web | auto | Set in `fly.web.toml` — points nginx to API via private network |
 | `FLY_API_TOKEN` | GitHub | **yes** | GitHub Actions deploy token |
+
+---
+
+## Alternative deployment platforms
+
+If Fly.io authentication is unavailable, the same Docker images deploy to Render.com or Railway.app with minimal changes.
+
+### Render.com
+
+A `render.yaml` at the repo root configures both services. Steps:
+
+1. Go to [render.com/deploy](https://render.com) → **New → Blueprint**
+2. Connect your GitHub repo — Render auto-detects `render.yaml`
+3. In the environment variable editor, set:
+   - `DATABASE_URL` → Supabase connection string (see Option A in Step 2 above)
+   - Leave `JWT_SECRET` blank — Render auto-generates one
+4. Click **Apply** — Render builds and deploys both services
+5. The web service URL is your public endpoint (`https://green-desk-web.onrender.com` or your custom domain)
+
+For CI/CD: generate a Render API key in **Account Settings → API Keys**, then add it as `RENDER_API_KEY` in GitHub secrets and update the deploy job.
+
+### Railway.app
+
+1. `railway login` (opens browser OAuth — simpler than Fly.io)
+2. `railway init` in the repo root → create project **Green Desk**
+3. Create two services via Railway dashboard:
+   - **API**: Dockerfile path `packages/api/Dockerfile`, build context `.`
+   - **Web**: Dockerfile path `packages/web/Dockerfile`, build context `.`
+4. For the API service, set environment variables (same as Step 3 above)
+5. For the Web service, set `API_HOST` → Railway internal hostname for the API service (shown in Railway dashboard under "Networking")

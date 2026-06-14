@@ -1,0 +1,38 @@
+# Render.com Infrastructure as Code
+# Deploy: create a new Render Blueprint pointing at this repo
+# See docs/render-deploy.md for step-by-step instructions
+#
+# Architecture:
+#   green-desk-web (public) ─► nginx ─► /api/* ─► green-desk-api (private, :3001)
+#                                                       └─► Supabase PostgreSQL
+
+services:
+  # API service — private (not internet-accessible, only reachable from green-desk-web)
+  - type: pserv
+    name: green-desk-api
+    runtime: docker
+    dockerfilePath: ./packages/api/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # set manually in Render dashboard (Supabase connection string)
+      - key: JWT_SECRET
+        generateValue: true  # Render auto-generates a secure random value
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: REDIS_URL
+        sync: false          # optional — leave blank to use in-memory fallback
+
+  # Web frontend — public (serves React SPA + proxies /api/* to API service)
+  - type: web
+    name: green-desk-web
+    runtime: docker
+    dockerfilePath: ./packages/web/Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /
+    envVars:
+      - key: API_HOST
+        value: green-desk-api:3001  # Render private network hostname for the API service
