@@ -135,23 +135,28 @@ jobs:
           retention-days: 7
 
   deploy:
-    name: Deploy to Fly.io
+    name: Deploy to Render
     runs-on: ubuntu-latest
     needs: [test, e2e]
     # Only deploy from main branch pushes (not PRs)
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Deploy API
-        run: flyctl deploy --config fly.api.toml --remote-only
+      - name: Trigger Render deploy
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK_API" ]; then
+            echo "Deploying API..."
+            curl -sf -X POST "$RENDER_DEPLOY_HOOK_API"
+          else
+            echo "RENDER_DEPLOY_HOOK_API not set — skipping API deploy"
+            echo "See docs/render-deploy.md §6 to configure deploy hooks"
+          fi
+          if [ -n "$RENDER_DEPLOY_HOOK_WEB" ]; then
+            echo "Deploying Web..."
+            curl -sf -X POST "$RENDER_DEPLOY_HOOK_WEB"
+          else
+            echo "RENDER_DEPLOY_HOOK_WEB not set — skipping Web deploy"
+          fi
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-
-      - name: Deploy Web
-        run: flyctl deploy --config fly.web.toml --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          RENDER_DEPLOY_HOOK_API: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
+          RENDER_DEPLOY_HOOK_WEB: ${{ secrets.RENDER_DEPLOY_HOOK_WEB }}
