@@ -15,7 +15,7 @@ jest.mock('../billing/stripe', () => ({
 }));
 jest.mock('../db');
 
-const mockStripe = stripe as jest.Mocked<typeof stripe>;
+const mockStripe = stripe as jest.Mocked<NonNullable<typeof stripe>>;
 const mockQuery = db.query as jest.Mock;
 const JWT_SECRET = 'test-secret';
 process.env.JWT_SECRET = JWT_SECRET;
