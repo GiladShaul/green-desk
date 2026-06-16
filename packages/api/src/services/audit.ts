@@ -32,7 +32,7 @@ interface AuditParams {
 }
 
 function writeAuditLog(params: AuditParams): void {
-  query(
+  void Promise.resolve(query(
     `INSERT INTO audit_logs
        (tenant_id, actor_id, actor_email, action, resource_type, resource_id, changes, ip_address, user_agent)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
@@ -47,7 +47,7 @@ function writeAuditLog(params: AuditParams): void {
       params.ipAddress ?? null,
       params.userAgent ?? null,
     ],
-  ).catch((err: unknown) => logger.error({ err }, '[audit] write error'));
+  )).catch((err: unknown) => logger.error({ err }, '[audit] write error'));
 }
 
 function getClientIp(req: AuthRequest): string | null {
@@ -72,8 +72,9 @@ export function auditLog(
   const ipAddress = getClientIp(req);
   const userAgent = req.headers['user-agent'] ?? null;
 
-  query<{ email: string }>('SELECT email FROM users WHERE id = $1', [actorId])
+  void Promise.resolve(query<{ email: string }>('SELECT email FROM users WHERE id = $1', [actorId]))
     .then((result) => {
+      if (!result) return;
       writeAuditLog({
         tenantId,
         actorId,

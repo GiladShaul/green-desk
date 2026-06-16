@@ -1,5 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
+import bcrypt from 'bcryptjs';
 import { query } from '../db';
 import { requireAuth, AuthRequest } from '../auth/middleware';
 import { getTenantPlanLimits } from '../billing/plans';
@@ -100,6 +101,54 @@ router.patch('/users/:id', requireAuth, requireAdmin, async (req: AuthRequest, r
   );
   auditLog(req, { action: 'update', resourceType: 'user', resourceId: id, changes });
   res.json(result.rows[0]);
+});
+
+// POST /api/admin/users — create a user directly (admin only)
+router.post('/users', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { name, email, password } = req.body as Record<string, unknown>;
+  const tenantId = req.user!.tenantId;
+
+  if (typeof name !== 'string' || !name.trim()) {
+    res.status(400).json({ error: 'name is required' });
+    return;
+  }
+  if (typeof email !== 'string' || !email.trim()) {
+    res.status(400).json({ error: 'email is required' });
+    return;
+  }
+  if (typeof password !== 'string' || password.length < 8) {
+    res.status(400).json({ error: 'password must be at least 8 characters' });
+    return;
+  }
+
+  const { seatsLimit } = await getTenantPlanLimits(tenantId);
+  if (seatsLimit !== null) {
+    const countResult = await query<{ count: string }>(
+      "SELECT COUNT(*) AS count FROM users WHERE tenant_id = $1 AND status != 'deactivated'",
+      [tenantId]
+    );
+    if (parseInt(countResult.rows[0].count, 10) >= seatsLimit) {
+      res.status(402).json({
+        error: 'User seat limit reached for your plan. Upgrade to add more users.',
+        upgradeUrl: '/api/billing/checkout',
+      });
+      return;
+    }
+  }
+
+  const existing = await query<{ id: string }>('SELECT id FROM users WHERE email = $1 AND tenant_id = $2', [email, tenantId]);
+  if (existing.rows.length > 0) {
+    res.status(409).json({ error: 'A user with this email already exists' });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const result = await query<{ id: string; email: string; name: string; role: string; created_at: string }>(
+    'INSERT INTO users (email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, role, created_at',
+    [email, passwordHash, name.trim(), 'member', tenantId]
+  );
+  auditLog(req, { action: 'create', resourceType: 'user', resourceId: result.rows[0].id });
+  res.status(201).json(result.rows[0]);
 });
 
 // GET /api/admin/analytics — utilization analytics (admin only)

@@ -83,11 +83,12 @@ describe('Plan enforcement — floors', () => {
   });
 
   test('starter plan: allows multiple floors', async () => {
-    // starter has maxFloors=null so floor count query is skipped — only getTenantPlanLimits + INSERT
+    // starter has maxFloors=null so floor count query is skipped — getTenantPlanLimits + INSERT + auditLog email lookup
     mockQuery.mockResolvedValueOnce({ rows: [{ plan: 'starter', plan_seats_limit: 25 }] });
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 'floor-new', name: 'Floor 6', building: 'HQ', floor_number: 6, created_at: new Date().toISOString() }],
     });
+    mockQuery.mockResolvedValueOnce({ rows: [{ email: 'admin@test.com' }] }); // auditLog email lookup
 
     const res = await request(app)
       .post('/api/floors')
@@ -121,6 +122,7 @@ describe('Plan enforcement — users', () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 'user-new', email: 'new@example.com', name: 'New User', role: 'member', created_at: new Date().toISOString() }],
     });
+    mockQuery.mockResolvedValueOnce({ rows: [{ email: 'admin@test.com' }] }); // auditLog email lookup
 
     const res = await request(app)
       .post('/api/admin/users')
